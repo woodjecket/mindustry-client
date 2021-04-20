@@ -2,8 +2,6 @@ package mindustry.client.storage
 
 class DummyStorageSystem : StorageSystem() {
 
-    override var locked = false
-
     override fun getByte(index: Int) = memory[index]
 
     override fun setByte(index: Int, value: Byte) { memory[index] = value }
@@ -18,12 +16,4 @@ class DummyStorageSystem : StorageSystem() {
     }
 
     private var memory = ByteArray(2048 + 1024)
-
-    override fun lock(timeout: Int) {
-        locked = true // todo: timeout
-    }
-
-    override fun unlock() {
-        locked = false
-    }
 }

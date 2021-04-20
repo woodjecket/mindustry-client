@@ -63,7 +63,7 @@ object Packets {
             val buf = ByteBuffer.wrap(array)
             sequenceCount = buf.int
             sequenceNumber = buf.int
-            expirationTime = buf.long.toInstant()
+            expirationTime = buf.long.toInstant() ?: Instant.MIN
             transmissionId = buf.long
             transmissionType = buf.int
         }

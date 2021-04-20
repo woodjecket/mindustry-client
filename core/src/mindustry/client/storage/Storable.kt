@@ -14,6 +14,10 @@ interface Storable {
 
         private val registered = mutableListOf<RegisteredStorable<*>>()
 
+        init {
+            register(DummyStorable::class) { id -> DummyStorable(id, byteArrayOf()) }
+        }
+
         fun <T : Storable> register(clazz: KClass<T>, provider: (id: Long) -> T) {
             registered.add(RegisteredStorable(clazz, provider))
         }

@@ -18,7 +18,6 @@ class StorageTests {
         @BeforeAll
         @JvmStatic
         fun init() {
-            Storable.StorableRegistrator.register(DummyStorable::class) { id -> DummyStorable(id, byteArrayOf()) }
             fs.init()
         }
     }

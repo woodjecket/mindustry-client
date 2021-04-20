@@ -15,6 +15,7 @@ import mindustry.client.antigrief.TileLogs.reset
 import mindustry.client.navigation.BuildPath
 import mindustry.client.navigation.Markers
 import mindustry.client.navigation.Navigation
+import mindustry.client.storage.DummyStorable
 import mindustry.client.ui.ChangelogDialog
 import mindustry.client.utils.*
 import mindustry.core.NetClient
@@ -247,6 +248,14 @@ object Client {
             val y = if (args.size == 3) args[2].toIntOrNull() ?: player.tileY() else player.tileY()
             val color = Color.HSVtoRGB(Random.nextFloat() * 360, 75f, 75f)
             Markers.add(Markers.Marker(x, y, args[0], color))
+        }
+
+        register("store [content...]", "Stores the content") { args, _ ->
+            ClientVars.storageSystem.store(DummyStorable(args[0].encodeToByteArray()))
+        }
+
+        register("list ", "AAA") { _, _ ->
+            println(ClientVars.storageSystem.all().map { if (it is DummyStorable) it.array.decodeToString() else it })
         }
     }
 

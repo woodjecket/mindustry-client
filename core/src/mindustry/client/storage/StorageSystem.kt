@@ -2,7 +2,9 @@ package mindustry.client.storage
 
 import mindustry.client.utils.buffer
 import mindustry.client.utils.toBytes
+import mindustry.client.utils.toInstant
 import java.io.IOException
+import java.time.Instant
 import kotlin.jvm.Throws
 
 abstract class StorageSystem {
@@ -11,7 +13,7 @@ abstract class StorageSystem {
         const val VERSION = 0
     }
 
-    abstract val locked: Boolean
+    val locked get() = metadataBytes[4 until 12].buffer().long.toInstant()?.isAfter(Instant.now()) == true
 
     protected abstract fun getByte(index: Int): Byte
     protected abstract fun setByte(index: Int, value: Byte)
@@ -19,10 +21,10 @@ abstract class StorageSystem {
     protected abstract fun getRange(range: IntRange): ByteArray
     protected abstract fun setRange(range: IntRange, value: ByteArray)
 
-    private lateinit var metadataBytes: ByteSection
-    private lateinit var mainBytes: ByteSection
+    protected lateinit var metadataBytes: ByteSection
+    protected lateinit var mainBytes: ByteSection
 
-    private class StorageSystemByteSection(private val storageSystem: StorageSystem, private val startingIndex: Int, override val size: Int) : ByteSection {
+    protected class StorageSystemByteSection(private val storageSystem: StorageSystem, private val startingIndex: Int, override val size: Int) : ByteSection {
         override fun get(index: Int) = storageSystem.getByte(index + startingIndex)
 
         override fun get(range: IntRange) = storageSystem.getRange(range.first + startingIndex..range.last + startingIndex)
@@ -51,7 +53,7 @@ abstract class StorageSystem {
 
     fun getById(id: Long) = retrieveStorable(allINodes().single { it.id == id })
 
-    private fun getLock(timeout: Int = 30_000) {
+    private fun getLock(timeout: Int = 30) {
         while (locked) {
             Thread.sleep(10L)
         }
@@ -122,7 +124,7 @@ abstract class StorageSystem {
 
         val initialSize = metadataBytes.buffer().int
         metadataBytes[0 until 4] = (initialSize + 1).toBytes()
-        val metadataAddress = (initialSize * 8) + Int.SIZE_BYTES
+        val metadataAddress = (initialSize * 8) + Int.SIZE_BYTES + Long.SIZE_BYTES
         metadataBytes[metadataAddress until metadataAddress + 4] = spot.first.toBytes()
         metadataBytes[metadataAddress + 4 until metadataAddress + 8] = spot.last.toBytes()
         mainBytes[spot] = encoded
@@ -131,6 +133,7 @@ abstract class StorageSystem {
     private fun inodeAddresses(): List<IntRange> {
         val buf = metadataBytes.buffer()
         val count = buf.int
+        val lockTime = buf.long
         val output = mutableListOf<IntRange>()
         for (i in 0 until count) {
             output.add(buf.int..buf.int)
@@ -176,7 +179,11 @@ abstract class StorageSystem {
     }
 
     // TODO: Add support for locking ranges instead of the entire filesystem
-    abstract fun lock(timeout: Int)
+    protected open fun lock(timeout: Int) {
+        metadataBytes[4 until 12] = Instant.now().plusSeconds(timeout.toLong()).epochSecond.toBytes()
+    }
 
-    abstract fun unlock()
+    protected open fun unlock() {
+        metadataBytes[4 until 12] = 0L.toBytes()
+    }
 }

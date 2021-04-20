@@ -6,8 +6,10 @@ import arc.scene.ui.Label
 import arc.scene.ui.layout.Cell
 import arc.scene.ui.layout.Table
 import arc.util.serialization.Base64Coder
+import mindustry.client.crypto.Base32768Coder
 import mindustry.ui.Styles
 import mindustry.ui.dialogs.BaseDialog
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -34,7 +36,10 @@ fun ByteBuffer.bytes(num: Int): ByteArray {
 }
 
 /** Converts a [Long] representing unix time in seconds to [Instant] */
-fun Long.toInstant(): Instant = Instant.ofEpochSecond(this)
+fun Long.toInstant(): Instant? {
+    if (Instant.MIN.epochSecond > this || Instant.MAX.epochSecond < this) return null
+    return Instant.ofEpochSecond(this)
+}
 
 /** Seconds between this and [other].  If [other] happened after this, it will be positive. */
 fun Temporal.secondsBetween(other: Temporal) = timeSince(other, ChronoUnit.SECONDS)
@@ -42,7 +47,9 @@ fun Temporal.secondsBetween(other: Temporal) = timeSince(other, ChronoUnit.SECON
 fun Temporal.timeSince(other: Temporal, unit: TemporalUnit) = unit.between(this, other)
 
 /** The age of this temporal in the given unit (by default seconds). Always positive. */
-fun Temporal.age(unit: TemporalUnit = ChronoUnit.SECONDS) = abs(this.timeSince(Instant.now(), unit))
+fun Temporal?.age(unit: TemporalUnit = ChronoUnit.SECONDS): Long {
+    return abs(this?.timeSince(Instant.now(), unit) ?: return Long.MAX_VALUE)
+}
 
 /** Adds an element to the table followed by a row. */
 fun <T : Element> Table.row(element: T): Cell<T> {
@@ -58,6 +65,10 @@ inline fun dialog(name: String, style: Dialog.DialogStyle = Styles.defaultDialog
 fun ByteArray.base64(): String = Base64Coder.encode(this).concatToString()
 
 fun String.base64(): ByteArray? = try { Base64Coder.decode(this) } catch (e: IllegalArgumentException) { null }
+
+fun ByteArray.base32678(): String = Base32768Coder.encode(this)
+
+fun String.base32678(): ByteArray? = try { Base32768Coder.decode(this) } catch (e: IOException) { null }
 
 fun Int.toBytes() = byteArrayOf((this shr 24).toByte(), (this shr 16).toByte(), (this shr 8).toByte(), (this).toByte())
 

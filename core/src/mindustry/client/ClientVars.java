@@ -4,11 +4,14 @@ import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.client.antigrief.*;
+import mindustry.client.storage.DummyStorageSystem;
+import mindustry.client.storage.StorageSystem;
 import org.jetbrains.annotations.*;
 
 public class ClientVars {
     // Misc
     @NotNull public static ClientMode mode = ClientMode.normal;
+    @NotNull public static StorageSystem storageSystem = new DummyStorageSystem();
 
     // Config Queue
     @NotNull public static Queue<ConfigRequest> configs = new Queue<>();

@@ -8,6 +8,7 @@ import mindustry.*
 import mindustry.client.communication.*
 import mindustry.client.crypto.*
 import mindustry.client.navigation.*
+import mindustry.client.storage.MessageBlockStorageSystem
 import mindustry.client.ui.*
 import mindustry.client.utils.FloatEmbed
 import mindustry.entities.units.*
@@ -27,6 +28,8 @@ object Main : ApplicationListener {
         if (Core.app.isDesktop) {
             communicationSystem = SwitchableCommunicationSystem(MessageBlockCommunicationSystem, PluginCommunicationSystem)
             communicationSystem.init()
+            ClientVars.storageSystem = MessageBlockStorageSystem
+            ClientVars.storageSystem.init()
 
             ClientVars.clientCommandHandler.register("e", "<destination> <message...>", "Send an encrypted chat message") { args ->
                 val dest = args[0]
