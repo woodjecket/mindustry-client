@@ -309,6 +309,12 @@ project(":core"){
         }
     }
 
+    compileKotlin {
+        kotlinOptions {
+            freeCompilerArgs += "-Xopt-in=kotlin.RequiresOptIn"
+        }
+    }
+
     compileJava.options.fork = true
 
     task preGen{

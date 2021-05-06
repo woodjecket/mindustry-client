@@ -15,5 +15,5 @@ class DummyStorageSystem : StorageSystem() {
         }
     }
 
-    private var memory = ByteArray(2048 + 1024)
+    private var memory = ByteArray(61440)
 }

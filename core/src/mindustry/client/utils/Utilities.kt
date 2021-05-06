@@ -17,6 +17,7 @@ import java.time.temporal.Temporal
 import java.time.temporal.TemporalUnit
 import java.util.zip.DeflaterInputStream
 import java.util.zip.InflaterInputStream
+import kotlin.experimental.and
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -72,7 +73,22 @@ fun String.base32678(): ByteArray? = try { Base32768Coder.decode(this) } catch (
 
 fun Int.toBytes() = byteArrayOf((this shr 24).toByte(), (this shr 16).toByte(), (this shr 8).toByte(), (this).toByte())
 
+fun Char.toBytes() = byteArrayOf((toInt() shr 8).toByte(), (this).toByte())
+
 fun Long.toBytes() = byteArrayOf((this shr 56).toByte(), (this shr 48).toByte(), (this shr 40).toByte(), (this shr 32).toByte(), (this shr 24).toByte(), (this shr 16).toByte(), (this shr 8).toByte(), (this).toByte())
+
+fun ByteArray.toInt(): Int {
+    return this[0].toInt() and 0xFF shl 24  or
+          (this[1].toInt() and 0xFF shl 16) or
+          (this[2].toInt() and 0xFF shl 8)  or
+          (this[3].toInt() and 0xFF shl 0)
+}
+
+fun ByteArray.toShort(): Short {
+    return ((this[1].toInt() and 0xFF shl 8) or (this[0].toInt() and 0xFF shl 0)).toShort()
+}
+
+fun ByteArray.toChar() = toShort().toChar()
 
 fun Double.floor() = floor(this).toInt()
 
@@ -118,3 +134,19 @@ fun String.replaceLast(deliminator: String, replacement: String): String {
 }
 
 fun String.removeLast(deliminator: String) = replaceLast(deliminator, "")
+
+fun <T> T.print(message: String = ""): T {
+    println(message + this.toString())
+    return this
+}
+
+val IntRange.size get() = last - first
+
+fun onesUntilEnd(start: Int): Byte = (0xFF shr start).toByte()
+
+fun ones(num: Int): Byte = ((0xFF shl (8 - num)) or 0xFF).toByte()
+
+fun ByteArray.padded(length: Int): ByteArray {
+    if (size >= length) return this
+    return reversedArray().copyOf(length).reversedArray()
+}

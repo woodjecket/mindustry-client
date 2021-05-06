@@ -4,6 +4,7 @@ import arc.*;
 import arc.func.*;
 import arc.scene.ui.TextButton.*;
 import arc.util.*;
+import mindustry.client.storage.MessageBlockStorageSystem;
 import mindustry.gen.*;
 import mindustry.logic.LStatements.*;
 import mindustry.ui.*;
@@ -80,6 +81,11 @@ public class LogicDialog extends BaseDialog{
             dialog.addCloseButton();
             dialog.show();
         }).disabled(t -> canvas.statements.getChildren().size >= LExecutor.maxInstructions);
+
+        buttons.button("Use as storage", () -> {
+            hide();
+            consumer.get(MessageBlockStorageSystem.INSTANCE.allocate());
+        });
 
         add(canvas).grow().name("canvas");
 

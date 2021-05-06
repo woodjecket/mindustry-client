@@ -14,6 +14,7 @@ abstract class StorageSystem {
     }
 
     val locked get() = metadataBytes[4 until 12].buffer().long.toInstant()?.isAfter(Instant.now()) == true
+    var size = 0
 
     protected abstract fun getByte(index: Int): Byte
     protected abstract fun setByte(index: Int, value: Byte)
@@ -38,9 +39,11 @@ abstract class StorageSystem {
         override fun iterator() = all().iterator()
     }
 
-    fun init() {
+    open fun init() {
+        val totalSize = 1024 * 60
         metadataBytes = StorageSystemByteSection(this, 0, 1024)
-        mainBytes = StorageSystemByteSection(this, 1025, 2048)
+        mainBytes = StorageSystemByteSection(this, metadataBytes.size + 1, totalSize - metadataBytes.size)
+        size = metadataBytes.size + mainBytes.size
     }
 
     fun all(): List<Storable> {
@@ -76,11 +79,15 @@ abstract class StorageSystem {
 
     @Throws(IOException::class)
     fun store(storable: Storable) {
+        println("awaiting lock")
         getLock()
+        println("got lock")
 
         val encoded = storable.serialize()
 
+        println("encoded")
         val spots = freeSpots()
+        println("spots")
 
         val finalSpots: List<IntRange>
         val chunks = mutableListOf<ByteArray>()
@@ -105,14 +112,18 @@ abstract class StorageSystem {
             }
             finalSpots = found
         }
+        println("AAAAA")
 
         val inode = INode(finalSpots, Storable.StorableRegistrator.id(storable), VERSION, storable.id)
 
+        println("storing inode")
         storeINode(inode, extraUsedChunks = finalSpots)
+        println("storing inode")
 
         for ((index, spot) in finalSpots.withIndex()) {
             mainBytes[spot] = chunks[index]
         }
+        println("storing")
 
         unlock()
     }
