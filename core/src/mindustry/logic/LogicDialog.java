@@ -4,6 +4,7 @@ import arc.*;
 import arc.func.*;
 import arc.scene.ui.TextButton.*;
 import arc.util.*;
+import mindustry.client.communication.MessageBlockCommunicationSystem;
 import mindustry.client.storage.MessageBlockStorageSystem;
 import mindustry.gen.*;
 import mindustry.logic.LStatements.*;

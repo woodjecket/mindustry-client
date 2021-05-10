@@ -25,7 +25,7 @@ abstract class StorageSystem {
     protected lateinit var metadataBytes: ByteSection
     protected lateinit var mainBytes: ByteSection
 
-    protected class StorageSystemByteSection(private val storageSystem: StorageSystem, private val startingIndex: Int, override val size: Int) : ByteSection {
+    protected class StorageSystemByteSection(private val storageSystem: StorageSystem, private val startingIndex: Int, override var size: Int) : ByteSection {
         override fun get(index: Int) = storageSystem.getByte(index + startingIndex)
 
         override fun get(range: IntRange) = storageSystem.getRange(range.first + startingIndex..range.last + startingIndex)

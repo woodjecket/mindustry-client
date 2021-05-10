@@ -21,14 +21,26 @@ object Base32768Coder {
 
     fun encodedLengthOf(bytes: Int) = ((bytes * 8.0) / BITS).ceil()
 
+    @OptIn(ExperimentalUnsignedTypes::class)
     fun encode(input: ByteArray): String {
         val out = CharArray(encodedLengthOf(input.size))
+        val originalBits = BitSet.valueOf(input)
+        val newBits = BitSet()
 
-        val bitset = BitSet.valueOf(input)
+        var idx = 0
         for (index in 0 until out.size - 1) {
-            out[index] = bitset[index * BITS, (index + 1) * BITS].toByteArray().padded(2).toChar() + 128
+            val first = input[index]
+            val second = input.getOrElse(index + 1) { 0 }
+            val offset = (index * BITS) % 8
+            val aaa = (first.toUInt() shr offset)
+            for (i in 0 until 16) {
+                newBits[idx++] = (aaa and (1u shl i)) == 1u
+            }
+            out[index] = ((first.toUInt() shr offset) or (second.toUInt() shr (offset + 8))).toInt().toChar() + 128
         }
-        out[out.size - 1] = 123.toChar()
+
+        println("O: $originalBits")
+        println("N: $newBits")
 
         return String(charArrayOf(input.size.toChar() + 128)) + out.concatToString()
     }
@@ -67,20 +79,20 @@ object Base32768Coder {
     @Throws(IOException::class)
     fun decode(input: String): ByteArray {
         val size = input.first().toInt() - 128
-        println("size = $size")
-        val output = BitSet(size * 8)
+        val output = ByteArray(size)
 
-        for ((index, c) in input.substring(2 until input.length).withIndex()) {
-            for ((b, i) in ((index * BITS) until ((index + 1) * BITS)).withIndex()) {
-                val char = (c - 128).toInt()
-//                println("Setting bits $i to ${i + BITS} to ${toBinaryString(char)}")
-//                for (bit in 15 downTo 0) {
-//                }
-                output[i] = ((char and (1 shl b)) shr b) == 1
-            }
+        for ((index, c) in input.withIndex()) {
+            if (index == 0) continue
+
+            val firstByteIndex = ((index - 1) * BITS) / 8
+            val secondByteIndex = firstByteIndex + 1
+            val shifted = c.toInt().toUInt() shr ((index - 1) % BITS)
+            output[firstByteIndex] = (output[firstByteIndex].toUInt() or (shifted and 0b11111111.toUInt())).toByte()
+            if (secondByteIndex >= output.size) continue
+            output[secondByteIndex] = ((output[secondByteIndex].toUInt() or (shifted and 0b1111111100000000.toUInt())) shr 8).toByte()
         }
 
-        return output.toByteArray().apply { println(contentToString()) }.sliceArray(0 until size)
+        return output
     }
 
     fun encode(string: String): String {

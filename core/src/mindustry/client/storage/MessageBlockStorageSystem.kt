@@ -87,8 +87,8 @@ object MessageBlockStorageSystem : StorageSystem() {
         cache = processorIndex.joinToString("") {
             removePrefix(it.code)?.split("\n")?.joinToString("") { item -> item.removeSurrounding("print \"", "\"") } ?: run { println("AAAAAAAA"); "" }
         }.base32678() ?: ByteArray(size)
+        (mainBytes as StorageSystemByteSection).size = cache.size - metadataBytes.size
         cache = cache.copyOf(size)
-        mainBytes = StorageSystemByteSection(this, metadataBytes.size + 1, size - metadataBytes.size)
     }
 
     fun save() {

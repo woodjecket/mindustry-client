@@ -8,10 +8,13 @@ import arc.scene.ui.Label
 import arc.scene.ui.TextButton
 import arc.scene.ui.layout.Cell
 import arc.scene.ui.layout.Table
+import arc.util.Strings
 import arc.util.serialization.Base64Coder
 import mindustry.client.crypto.Base32768Coder
+import mindustry.core.World
 import mindustry.ui.Styles
 import mindustry.ui.dialogs.BaseDialog
+import mindustry.world.Tile
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.time.Instant

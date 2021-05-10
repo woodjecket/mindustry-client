@@ -18,10 +18,12 @@ public class Base32768CoderTests {
         System.out.println(Arrays.toString(Base32768Coder.INSTANCE.decode(aaa)));
 
         for (int i = 0; i < 100; i++) {
-            byte[] bytes = new byte[1_000];
+            byte[] bytes = new byte[32];
             new Random().nextBytes(bytes);
 
             String encoded = Base32768Coder.INSTANCE.encode(bytes);
+            System.out.println("original: " + Arrays.toString(bytes));
+            System.out.println("decoded:  " + Arrays.toString(Base32768Coder.INSTANCE.decode(encoded)));
             Assertions.assertArrayEquals(bytes, Base32768Coder.INSTANCE.decode(encoded));
         }
 
