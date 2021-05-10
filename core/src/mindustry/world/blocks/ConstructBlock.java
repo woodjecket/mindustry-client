@@ -6,6 +6,7 @@ import arc.Graphics.Cursor.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.math.*;
+import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.struct.*;
 import arc.util.Timer;
@@ -21,8 +22,8 @@ import mindustry.content.*;
 import mindustry.core.*;
 import mindustry.entities.*;
 import mindustry.entities.units.*;
-import mindustry.game.EventType.*;
 import mindustry.game.*;
+import mindustry.game.EventType.*;
 import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.input.*;
@@ -35,7 +36,6 @@ import mindustry.world.blocks.storage.CoreBlock.*;
 import mindustry.world.blocks.storage.*;
 import mindustry.world.modules.*;
 
-import java.time.*;
 import java.util.*;
 import java.util.concurrent.atomic.*;
 
@@ -72,10 +72,6 @@ public class ConstructBlock extends Block{
     @Remote(called = Loc.server)
     public static void deconstructFinish(Tile tile, Block block, Unit builder){
         if(tile != null && builder != null && block != null){
-            tile.getLinkedTiles(t -> {
-                t.addToLog(new TileLogItem(builder, t, Instant.now().getEpochSecond(), "", "broke", block));
-                breakWarning(t, block, builder);
-            });
             if(Navigation.currentlyFollowing instanceof UnAssistPath){
                 if(((UnAssistPath) Navigation.currentlyFollowing).assisting == builder.getPlayer()){
                     if(block.isVisible()) {
@@ -86,9 +82,10 @@ public class ConstructBlock extends Block{
             }
         }
         if (tile != null && block != null) {
+            tile.getLinkedTiles(t -> Events.fire(new BlockBuildEventTile(t, tile.team(), builder, block, Blocks.air, tile.build == null? null : tile.build.config(), null)));
             Team team = tile.team();
             Fx.breakBlock.at(tile.drawx(), tile.drawy(), block.size);
-            Events.fire(new BlockBuildEndEvent(tile, builder, team, true, null));
+            Events.fire(new BlockBuildEndEvent(tile, builder, team, true, tile.build == null? null : tile.build.config(), tile.block()));
             tile.remove();
             if (shouldPlay()) Sounds.breaks.at(tile, calcPitch(false));
         }
@@ -112,6 +109,12 @@ public class ConstructBlock extends Block{
 
         float healthf = tile.build == null ? 1f : tile.build.healthf();
         Seq<Building> prev = tile.build instanceof ConstructBuild co ? co.prevBuild : null;
+        Block prevBlock = tile.block();
+
+
+        if (block == null) {
+            Events.fire(new BlockBreakEvent(tile, team, builder, tile.block(), tile.build == null? null : tile.build.config()));
+        }
 
         tile.setBlock(block, team, rotation);
 
@@ -136,12 +139,11 @@ public class ConstructBlock extends Block{
             tile.build.playerPlaced(config);
         }
 
-        Events.fire(new BlockBuildEndEvent(tile, builder, team, false, config));
+        Events.fire(new BlockBuildEndEvent(tile, builder, team, false, config, prevBlock));
 
         Fx.placeBlock.at(tile.drawx(), tile.drawy(), block.size);
 
         if(builder != null && tile.build != null){
-            tile.getLinkedTiles(t -> t.addToLog(new PlaceTileLog(builder, t, Instant.now().getEpochSecond(), "", block, tile.build.config())));
             if (Core.settings.getBool("viruswarnings") && builder.isPlayer() && config instanceof byte[] && tile.build instanceof LogicBlock.LogicBuild l && BuildPath.virusBlock(l)) {
                 ui.chatfrag.addMessage(Strings.format("@ has potentially placed a logic virus at (@, @) [accent]SHIFT + @ to view", builder.getPlayer().name, l.tileX(), l.tileY(), Core.keybinds.get(Binding.navigate_to_camera).key.name()), null, Color.scarlet.cpy().mul(.75f));
                 control.input.lastVirusWarning = l;
@@ -192,12 +194,20 @@ public class ConstructBlock extends Block{
     }
 
     public static void constructed(Tile tile, Block block, Unit builder, byte rotation, Team team, Object config){
+        Block prev = tile.block();
+
+        if (tile.build instanceof ConstructBuild b) {
+            for (var item : b.prevBuild != null ? b.prevBuild : new Seq<Building>()) {
+                Events.fire(new EventType.BlockBuildEventTile(item.tile, item.team, builder, item.block, block, item.config(), null));
+            }
+        }
+
         Call.constructFinish(tile, block, builder, rotation, team, config);
         if(tile.build != null){
             tile.build.placed();
         }
 
-        Events.fire(new BlockBuildEndEvent(tile, builder, team, false, config));
+        Events.fire(new BlockBuildEndEvent(tile, builder, team, false, config, prev));
     }
 
     @Override
@@ -527,7 +537,7 @@ public class ConstructBlock extends Block{
                 }
 
                 if (warnBlocks.get(cblock).first == 101 || distance.get() <= warnBlocks.get(cblock).first) {
-                    String format = Strings.format("@ is building a @ at @, @ (@ block@ from core).", Strings.stripColors(lastBuilder.playerNonNull().name), cblock.localizedName, tileX(), tileY(), distance.get(), distance.get() == 1 ? "" : "s");
+                    String format = Core.bundle.format("client.blockwarn", Strings.stripColors(lastBuilder.playerNonNull().name), cblock.localizedName, tileX(), tileY(), distance.get());
                     String format2 = String.format("%2d%% completed.", Mathf.round(progress * 100));
                     if (toast == null || toast.parent == null) {
                         toast = new Toast(2f, 0f);
@@ -538,6 +548,7 @@ public class ConstructBlock extends Block{
                     toast.add(new Label(format));
                     toast.row();
                     toast.add(new Label(format2, monoLabel));
+                    toast.touchable = Touchable.enabled;
                     toast.clicked(() -> Spectate.INSTANCE.spectate(ClientVars.lastSentPos.cpy().scl(tilesize)));
                     ClientVars.lastSentPos.set(tileX(), tileY());
                 }

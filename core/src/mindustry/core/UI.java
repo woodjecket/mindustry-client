@@ -91,8 +91,6 @@ public class UI implements ApplicationListener, Loadable{
     public void loadSync(){
         Fonts.outline.getData().markupEnabled = true;
         Fonts.def.getData().markupEnabled = true;
-        Fonts.mono.getData().markupEnabled = true;
-        Fonts.monoOutline.getData().markupEnabled = true;
         Fonts.def.setOwnsTexture(false);
 
         Core.assets.getAll(Font.class, new Seq<>()).each(font -> font.setUseIntegerPositions(true));
@@ -561,6 +559,29 @@ public class UI implements ApplicationListener, Loadable{
         }else{
             return number + "";
         }
+    }
+
+    public static String formatTime(float ticks){
+        int s = Math.round(ticks / Time.toSeconds) % 60; // Round seconds so they dont display weird
+        int m = (int)(ticks / Time.toMinutes) % 60;
+        int h = (int)(ticks / Time.toHours);
+        String out = (h == 0 ? "" : h + "h") + (m == 0 ? "" : m + "m") + (s == 0 ? "" : s + "s");
+        return out.isEmpty() ? "0s" : out;
+    }
+
+    public static String formatSeconds(int seconds){
+        return formatTime(seconds * Time.toSeconds);
+    }
+
+    public static String formatMinutes(float ticks){
+        int m = (int)(ticks / Time.toMinutes) % 60;
+        int h = (int)(ticks / Time.toHours);
+        String out = (h == 0 ? "" : h + "h") + (m == 0 ? "" : m + "m");
+        return out.isEmpty() ? "0m" : out;
+    }
+
+    public static String formatMinutesFromMillis(long millis){
+        return formatMinutes(millis / 16.667f);
     }
 
     public static int roundAmount(int number){

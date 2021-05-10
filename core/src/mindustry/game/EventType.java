@@ -1,9 +1,9 @@
 package mindustry.game;
 
-import arc.util.*;
-import mindustry.core.GameState.*;
-import mindustry.ctype.*;
-import mindustry.entities.units.*;
+import arc.util.Nullable;
+import mindustry.core.GameState.State;
+import mindustry.ctype.UnlockableContent;
+import mindustry.entities.units.UnitCommand;
 import mindustry.gen.*;
 import mindustry.net.*;
 import mindustry.type.*;
@@ -200,13 +200,26 @@ public class EventType{
         }
     }
 
-    /** Called when the player configures a specific building. */
+    /** Called when a player configures any building. */
     public static class ConfigEvent{
         public final Building tile;
         public final Player player;
         public final Object value;
 
         public ConfigEvent(Building tile, Player player, Object value){
+            this.tile = tile;
+            this.player = player;
+            this.value = value;
+        }
+    }
+
+    /** Called just before a player configures any building. */
+    public static class ConfigEventBefore{
+        public final Building tile;
+        public final Player player;
+        public final Object value;
+
+        public ConfigEventBefore(Building tile, Player player, Object value){
             this.tile = tile;
             this.player = player;
             this.value = value;
@@ -311,19 +324,100 @@ public class EventType{
         }
     }
 
+    /**
+     * Called when block building begins by placing down the ConstructBlock.
+     */
+    public static class BlockBuildBeginEventBefore {
+        public final Tile tile;
+        public final Team team;
+        public final @Nullable Unit unit;
+        public final boolean breaking;
+        public final @Nullable Block newBlock;
+
+        public BlockBuildBeginEventBefore(Tile tile, Team team, Unit unit, boolean breaking, Block newBlock){
+            this.tile = tile;
+            this.team = team;
+            this.unit = unit;
+            this.breaking = breaking;
+            this.newBlock = newBlock;
+        }
+    }
+
     public static class BlockBuildEndEvent{
         public final Tile tile;
         public final Team team;
         public final @Nullable Unit unit;
         public final boolean breaking;
         public final @Nullable Object config;
+        public final @Nullable Block previous;
 
-        public BlockBuildEndEvent(Tile tile, @Nullable Unit unit, Team team, boolean breaking, @Nullable Object config){
+        public BlockBuildEndEvent(Tile tile, @Nullable Unit unit, Team team, boolean breaking, @Nullable Object config, Block previous){
             this.tile = tile;
             this.team = team;
             this.unit = unit;
             this.breaking = breaking;
             this.config = config;
+            this.previous = previous;
+        }
+    }
+
+    public static class BlockBuildEventTile {
+        public final Tile tile;
+        public final Team team;
+        public final Unit unit;
+        public final Block oldBlock;
+        public final Block newBlock;
+        public final @Nullable Object oldConfig;
+        public final @Nullable Object config;
+
+        public BlockBuildEventTile(Tile tile, Team team, Unit unit, Block oldBlock, Block newBlock, @Nullable Object oldConfig, @Nullable Object config) {
+            this.tile = tile;
+            this.team = team;
+            this.unit = unit;
+            this.oldBlock = oldBlock;
+            this.newBlock = newBlock;
+            this.oldConfig = oldConfig;
+            this.config = config;
+        }
+    }
+
+    public static class BuildPayloadPickup {
+        public final Tile tile;
+        public final Unit unit;
+        public final Building building;
+
+        public BuildPayloadPickup(Tile tile, Unit unit, Building building) {
+            this.tile = tile;
+            this.unit = unit;
+            this.building = building;
+        }
+    }
+
+    public static class BuildPayloadDrop {
+        public final Tile tile;
+        public final Unit unit;
+        public final Building building;
+
+        public BuildPayloadDrop(Tile tile, Unit unit, Building building) {
+            this.tile = tile;
+            this.unit = unit;
+            this.building = building;
+        }
+    }
+
+    public static class BlockBreakEvent {
+        public final Tile tile;
+        public final Team team;
+        public final @Nullable Unit unit;
+        public final Block oldBlock;
+        public final @Nullable Object oldConfig;
+
+        public BlockBreakEvent(Tile tile, Team team, @Nullable Unit unit, Block oldBlock, @Nullable Object oldConfig) {
+            this.tile = tile;
+            this.team = team;
+            this.unit = unit;
+            this.oldBlock = oldBlock;
+            this.oldConfig = oldConfig;
         }
     }
 

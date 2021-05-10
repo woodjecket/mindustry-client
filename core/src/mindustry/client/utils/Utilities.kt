@@ -1,8 +1,11 @@
+@file:Suppress("UNUSED")
+
 package mindustry.client.utils
 
 import arc.scene.Element
 import arc.scene.ui.Dialog
 import arc.scene.ui.Label
+import arc.scene.ui.TextButton
 import arc.scene.ui.layout.Cell
 import arc.scene.ui.layout.Table
 import arc.util.serialization.Base64Coder
@@ -60,8 +63,10 @@ fun <T : Element> Table.row(element: T): Cell<T> {
 }
 
 inline fun dialog(name: String, style: Dialog.DialogStyle = Styles.defaultDialog, dialog: BaseDialog.() -> Unit): Dialog {
-    return BaseDialog(name, style).apply { clear() }.apply(dialog)
+    return BaseDialog(name, style).apply(dialog)
 }
+
+fun Cell<TextButton>.wrap(value: Boolean) { get().label.setWrap(value) }
 
 fun ByteArray.base64(): String = Base64Coder.encode(this).concatToString()
 
@@ -120,6 +125,25 @@ fun ByteArray.compress() = Compression.compress(this)
 
 fun ByteArray.inflate() = Compression.inflate(this)
 
+/** Pretty slow */
+fun String.restrictToAscii(): String {
+    val new = StringBuilder()
+    for (char in this) {
+        if (char in ' '..'~') {
+            new.append(char)
+        }
+    }
+    return new.toString()
+}
+
+fun String.capLength(length: Int): String {
+    if (this.length <= length) return this
+    if (length <= 3) return substring(0 until length)
+    return substring(0 until length - 3) + "..."
+}
+
+fun String.stripColors(): String = Strings.stripColors(this)
+
 inline fun <T> Iterable<T>.sortedThreshold(threshold: Double, predicate: (T) -> Double): List<T> {
     return zip(map(predicate))  // Compute the predicate for each value and put it in pairs with the original item
         .filter { it.second >= threshold }  // Filter by threshold
@@ -150,3 +174,33 @@ fun ByteArray.padded(length: Int): ByteArray {
     if (size >= length) return this
     return reversedArray().copyOf(length).reversedArray()
 }
+
+data class Point2i(val x: Int, val y: Int)
+
+operator fun World.contains(tile: Point2i) = tile.x in 0 until width() && tile.y in 0 until height()
+
+/** Clamped */
+operator fun World.get(position: Point2i): Tile = tiles.getc(position.x, position.y)
+
+/** Clamped */
+operator fun World.get(x: Int, y: Int): Tile = tiles.getc(x, y)
+
+// x^2 + y^2 = r^2
+// x^2 + y^2 - r^2 = 0
+// x^2 - r^2 = -y^2
+inline fun circle(x: Int, y: Int, radius: Float, block: (x: Int, y: Int) -> Unit) {
+    val r2 = radius * radius
+//    for (x1 in (x - radius)..(x + radius)) {
+//        val n = r2 - sq(x1 - x)
+//        for (y1 in (y - n)..(y + n)) {
+//            block(x1, y1)
+//        }
+//    }
+    for (x1 in floor(x - radius).toInt()..ceil(x + radius).toInt()) {
+        for (y1 in floor(y - radius).toInt()..ceil(y + radius).toInt()) {
+            if (sq(x1 - x) + sq(y1 - y) < r2) block(x1, y1)
+        }
+    }
+}
+
+fun sq(inp: Int) = inp * inp

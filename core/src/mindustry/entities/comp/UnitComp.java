@@ -11,16 +11,15 @@ import arc.util.*;
 import mindustry.ai.*;
 import mindustry.ai.types.*;
 import mindustry.annotations.Annotations.*;
-import mindustry.client.navigation.Navigation;
-import mindustry.client.navigation.TurretPathfindingEntity;
+import mindustry.client.navigation.*;
 import mindustry.content.*;
 import mindustry.core.*;
 import mindustry.ctype.*;
 import mindustry.entities.*;
 import mindustry.entities.abilities.*;
 import mindustry.entities.units.*;
-import mindustry.game.EventType.*;
 import mindustry.game.*;
+import mindustry.game.EventType.*;
 import mindustry.gen.*;
 import mindustry.logic.*;
 import mindustry.type.*;
@@ -49,7 +48,7 @@ abstract class UnitComp implements Healthc, Physicsc, Hitboxc, Statusc, Teamc, I
 
     transient Seq<Ability> abilities = new Seq<>(0);
     private transient float resupplyTime = Mathf.random(10f);
-    private transient boolean wasPlayer;
+    public transient boolean wasPlayer;
 
     private final transient ObjectMap<Weapon, TurretPathfindingEntity> pathfindingEntities = new ObjectMap<>();
 
@@ -302,7 +301,9 @@ abstract class UnitComp implements Healthc, Physicsc, Hitboxc, Statusc, Teamc, I
         team.data().updateCount(type, -1);
         controller.removed(self());
         for (Weapon weapon : type.weapons) {
-            Navigation.obstacles.remove(pathfindingEntities.get(weapon));
+            synchronized (Navigation.obstacles) {
+                Navigation.obstacles.remove(pathfindingEntities.get(weapon));
+            }
         }
     }
 
@@ -525,6 +526,10 @@ abstract class UnitComp implements Healthc, Physicsc, Hitboxc, Statusc, Teamc, I
     @Override
     public void killed(){
         wasPlayer = isLocal();
+        if (wasPlayer) {
+            player.persistPlans(); // Restore plans after respawn
+            player.formOnDeath = player.unit().formation;
+        }
         health = 0;
         dead = true;
 

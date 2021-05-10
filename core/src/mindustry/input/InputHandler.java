@@ -42,6 +42,7 @@ import mindustry.world.blocks.logic.*;
 import mindustry.world.blocks.payloads.*;
 import mindustry.world.blocks.power.*;
 import mindustry.world.blocks.storage.CoreBlock.*;
+import mindustry.world.blocks.units.*;
 import mindustry.world.meta.*;
 
 import java.time.*;
@@ -248,7 +249,6 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     public static void pickedBuildPayload(Unit unit, Building build, boolean onGround){
         if(build != null && unit instanceof Payloadc pay){
             build.tile.getLinkedTiles(tile2 -> {
-                tile2.addToLog(new TileLogItem(unit, tile2, Instant.now().getEpochSecond(), "", "picked up", tile2.block()));
                 ConstructBlock.breakWarning(tile2, build.block, unit);
             });
 
@@ -291,12 +291,6 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     @Remote(called = Loc.server, targets = Loc.server)
     public static void payloadDropped(Unit unit, float x, float y){
         if(unit instanceof Payloadc pay){
-            if(pay.hasPayload()){
-                if(pay.payloads().peek() instanceof BuildPayload){
-                    Tile tile = world.tile((int)x / tilesize, (int)y / tilesize);
-                    tile.getLinkedTiles(tile2 -> tile2.addToLog(new TileLogItem(unit, tile2, Instant.now().getEpochSecond(), "", "dropped", ((BuildPayload)(pay.payloads().peek())).block())));
-                }
-            }
             float prevx = pay.x(), prevy = pay.y();
             pay.set(x, y);
             pay.dropLastPayload();
@@ -334,7 +328,6 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
         if(player != null){
             build.lastAccessed = player.name;
-            build.tile.getLinkedTiles(t -> t.addToLog(new TileLogItem(player.unit(), t, Instant.now().getEpochSecond(), TileLogItem.toCardinalDirection(build.rotation + Mathf.sign(direction)), "rotated", build.block())));
             if(Navigation.currentlyFollowing instanceof UnAssistPath){
                 if(((UnAssistPath) Navigation.currentlyFollowing).assisting == player){
                     Time.run(2f, () -> {
@@ -360,17 +353,20 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
         Object previous = build.config();
 
+        Events.fire(new ConfigEventBefore(build, player, value));
         build.configured(player == null || player.dead() ? null : player.unit(), value);
         Core.app.post(() -> Events.fire(new ConfigEvent(build, player, value)));
 
         if(player != null){
-            build.tile.getLinkedTiles(t -> t.addToLog(new ConfigTileLog(player.unit(), t, build.config(), previous, Instant.now().getEpochSecond(), "")));
             if(Navigation.currentlyFollowing instanceof UnAssistPath path){
                 if(path.assisting == player){
                     ClientVars.configs.add(new ConfigRequest(build.tileX(), build.tileY(), previous));
                 }
             }
-            if (Core.settings.getBool("powersplitwarnings") && build instanceof PowerNode.PowerNodeBuild node) {
+            if (Core.settings.getBool("commandwarnings") && build instanceof CommandCenter.CommandBuild cmd && build.team == player.team()) {
+                ui.chatfrag.addMessage(Strings.format("@ set command center at (@, @) to @", Strings.stripColors(player.name), cmd.tileX(), cmd.tileY(), cmd.team.data().command.localized()), null, Color.scarlet.cpy().mul(.75f));
+                ClientVars.lastSentPos.set(build.tileX(), build.tileY());
+            } else if (Core.settings.getBool("powersplitwarnings") && build instanceof PowerNode.PowerNodeBuild node) {
                 if (value instanceof Integer val) {
                     if (new Seq<>((Point2[])previous).contains(Point2.unpack(val).sub(build.tileX(), build.tileY()))) {
                         String message = Strings.format("@ disconnected @ power @ at (@, @)", player.name, ++node.disconnections, node.disconnections == 1 ? "link" : "links", build.tileX(), build.tileY());
@@ -414,6 +410,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             throw new ValidateException(player, "Player cannot control a unit.");
         }
 
+        player.persistPlans(); // Restore plans after swapping units
+
         //clear player unit when they possess a core
         if(unit instanceof BlockUnitc block && block.tile() instanceof CoreBuild build){
             Fx.spawn.at(player);
@@ -443,9 +441,11 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
     @Remote(targets = Loc.both, called = Loc.both, forward = true)
     public static void unitClear(Player player){
-        //no free core teleports?
-        if(player == null || !player.dead() && player.unit().spawnedByCore) return;
-
+        if (player == null || !player.dead() && player.unit().spawnedByCore && !player.isLocal()) return;
+        if (player.isLocal()) {
+            player.persistPlans();
+            if (player.unit() != null && !player.dead() && player.unit().spawnedByCore && player.bestCore() != null) Call.unitControl(player, player.bestCore().unit()); // Bypass vanilla code which prevents you from respawning at core when already a core unit
+        }
         Fx.spawn.at(player);
         player.clearUnit();
         player.deathTimer = Player.deathDelay + 1f; //for instant respawn
@@ -508,7 +508,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             Unit unit = Units.closest(player.team(), player.x, player.y, u -> !u.isPlayer() && u.type == controlledType && !u.dead /* TODO: Make this a thing that actually works? && (!(u.controller() instanceof FormationAI f) || f.isBeingControlled(player.lastReadUnit)) */);
 
             if(unit != null){
-                if(!Vars.net.client() || controlInterval.get(0, 10f)){
+                if(!Vars.net.client() || controlInterval.get(10f)){
                     Call.unitControl(player, unit);
                 }
             }
@@ -1109,6 +1109,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     }
 
     public @Nullable Unit selectedUnit(){
+        if (ClientVars.hidingUnits) return null;
         Unit unit = Units.closest(player.team(), Core.input.mouseWorld().x, Core.input.mouseWorld().y, input.shift() ? 100f : 40f, Unitc::isAI);
         if(unit != null){
             unit.hitbox(Tmp.r1);
@@ -1335,10 +1336,10 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         float strafePenalty = ground ? 1f : Mathf.lerp(1f, unit.type().strafePenalty, Angles.angleDist(unit.vel().angle(), unit.rotation()) / 180f);
         float baseSpeed = unit.type().speed;
 
-        //limit speed to minimum formation speed to preserve formation TODO: All units are commanders now, reflect that change
-        if(unit instanceof Commanderc && ((Commanderc)unit).isCommanding()){
+        //limit speed to minimum formation speed to preserve formation
+        if(unit.isCommanding()){
             //add a tiny multiplier to let units catch up just in case
-            baseSpeed = ((Commanderc)unit).minFormationSpeed() * 0.95f;
+            baseSpeed = unit.minFormationSpeed() * 0.95f;
         }
 
         float speed = baseSpeed * Mathf.lerp(1f, unit.type().canBoost ? unit.type().boostMultiplier : 1f, unit.elevation) * strafePenalty;
@@ -1387,7 +1388,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 //            }
 //        }
 
-        //update commander inut
+        //update commander input
 //        if(unit instanceof Commanderc){
 //            if(Core.input.keyTap(Binding.command)){
 //                Call.unitCommand(player);

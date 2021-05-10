@@ -5,28 +5,29 @@ import arc.graphics.g2d.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.struct.*;
+import arc.util.*;
 import mindustry.*;
 import mindustry.client.antigrief.*;
+import mindustry.core.*;
 import mindustry.gen.*;
 import mindustry.ui.*;
 import mindustry.world.*;
 
+import java.util.concurrent.atomic.*;
+
 public class TileInfoFragment extends Table {
 
     public TileInfoFragment() {
-        NinePatchDrawable background = new NinePatchDrawable(Tex.buttonTransTop);
+        NinePatchDrawable background = new NinePatchDrawable(Tex.wavepane);
 
         setBackground(background);
         Image img = new Image();
-        add(new Padding(5f, 1f));
         add(img);
-        Table table = new Table();
         Label label = new Label("");
-        table.add(label);
-        add(new Padding(5f, 1f));
-        add(table);
+        add(label).height(126);
         visible(() -> Core.settings.getBool("tilehud"));
+        AtomicInteger lastPos = new AtomicInteger();
+        var builder = new StringBuilder();
         update(() -> {
             Tile hovered = Vars.control.input.cursorTile();
             if (hovered == null) {
@@ -37,19 +38,22 @@ public class TileInfoFragment extends Table {
                 img.setDrawable(hovered.floor().icon(Cicon.xlarge));
                 label.setText("");
                 return;
+            } else if (hovered.pos() == lastPos.get()) {
+                return;
             }
+            lastPos.set(hovered.pos());
 
             TextureRegion icon = hovered.block().icon(Cicon.xlarge);
             img.setDrawable(icon.found()? icon : hovered.floor().icon(Cicon.xlarge));
-            TileLog log = hovered.getLog();
-            Seq<TileLogItem> logItems = new Seq<>(log.log);
-            label.setText("");
-            logItems.reverse();
-            logItems.truncate(Math.min(3, logItems.size));
-            logItems.reverse();
-            for (TileLogItem item : logItems) {
-                label.setText(label.getText() + item.formatShort() + "\n");
+            var record = TileRecords.INSTANCE.get(hovered);
+            if (record == null) return;
+            var logs = record.lastLogs(7);
+
+            builder.setLength(0);
+            for (var item : logs) {
+                builder.append(item.toShortString()).append(" (").append(UI.formatMinutesFromMillis(Time.timeSinceMillis(item.getTime().toEpochMilli()))).append(")\n");
             }
+            label.setText(builder.length() == 0 ? "" : builder.substring(0, builder.length() - 1));
         });
     }
 }

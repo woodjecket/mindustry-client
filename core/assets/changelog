@@ -1,12 +1,79 @@
 # Foo and I are too lazy to update this most of the time, join the discord in the client tab on the main menu to stay up to date on new stuff.
 
+# Version 7.2.2
+ * Fixed an issue in buildpath where !builder belts and !builder drill would only partially upgrade each building
+ * Minor buildpath speed improvements
+ * Removed debug logging that shouldn't have been left in
+ * Fixed mono font disable option for real
+ * Added fallback discord presence for older java versions
+ * Added setting to find all non bundle strings
+ * Made some progress towards localization of the client, many of the strings are now in bundle and can be translated (its nowhere near done but its a start)
+ * Fixed an issue where formation units weren't being displayed as such in tile logs
+ * Fixed an issue in tile logs where a half built/broken block being destroyed would display something along the lines of "build1"
+ * Pressing escape will now close the player list if it is open
+
+# Version 7.2.1
+ * Fixed dialogs being weird
+ * Added timestamps to tile hud as well as the tile info menu
+ * Added enemy spawns as pathfinding obstacles
+ * Increased the number of items displayed on the tilehud to 7 to make it line up with the minimap
+ * Moved away from old discord presence library
+ * Added partial Russian support (thanks to thedimas3007)
+
+# Version 7.2.0
+ * Fixed the unlock all achievements button
+ * Fixed the mono font disable option not disabling it everywhere
+ * Fixed join messages spamming on world load
+ * Fixed the message block networking system not working at all
+ * Fixed break tile logs
+ * Disabled the mono font by default when the game is being run in a language other than english (some characters aren't in the font)
+ * Added a !networking command to check the status of client networking
+ * Removed the map markers button in the campaign to make room for the planet map button
+
+# Version 7.1.0
+ * Made client networking 190x faster via the use of microprocessors (processors can now be configured for networking instead of just message blocks)
+ * Fixed a tile log crash
+
+# Version 7.0
+ * Completely redid tile logs (they now properly keep track of block replacements, configuration changes, and multiblock)
+ * Added a basic map marker system (!marker [x] [y] <name>, can also be accessed by a button next to core database and schematics)
+ * Persistent plans can now be cancelled with Q
+ * Massively improved plan persistence, they will now appear instantly on respawn and should work better when swapping units super fast
+ * Plans persist through /sync
+ * Swapping to a unit who cant build and then back to one who can will cause your plans to reappear so you can pick up where you left off
+ * Navigation should work better with formations of large units
+ * Added buildplan count to the info block on the top left
+ * Added a bunch of aliases for !builder option names
+ * Added !builder conveyors and !builder drills to auto upgrade all belts/drills from copper/mechanical to their titanium/pneumatic variants
+ * Added a !poli command, spell polys right please
+ * Added a !silicone command, its silicon not silicone you silly cone
+ * Added a !togglesign command, its a simple command that toggles whether or not other players who have your key added see your messages with a green highlight
+ * Added !count <unit> to quickly find how many of a certain unit are alive
+ * Changed the way the response from !cc is displayed
+ * Added better join messages, they will always be sent regardless of whether or not the server has them enabled (tries to avoid sending two if the server has them on)
+ * Blocks from the bottom right menu are no longer deselected on death
+ * Unit factories and reconstructors now show how long until construction is finished
+ * Command center notifications work with SHIFT + Z
+ * Moved the client button on the title screen upwards for people with small displays
+ * Made the key management and import menus not terrible to look at
+ * Reactor (and other block) warnings are now easier to click on
+ * Added a new + button to logic instructions, clicking it allows you to add a new instruction just below the existing one
+ * Minor code cleanup
+
 # Version 6.6.1
- * Patched a crash when hovering an invalid "build" (impossible without js but whatever)
- * Fixed invisible/sandbox blocks being impossible to place with payload place mode (\)
+ * Patched a crash when hovering an invalid "build" (this only happens when people abuse admin anyways)
+ * Fixed invisible/sandbox blocks being impossible to place with payload place mode (\ key)
  * Major improvements to navigation
  * Fix for fire particles getting out of control, no longer spawns more particles at lower fps, the slider is still there if you want it
  * Buildpath will only draw up to 300 plans at a time to prevent massive lag when using !builder broken on large maps
  * Added a button to unlock all steam achievements (steam only)
+ * V to respawn at core even if already a core unit
+ * Build plans are kept when switching units (clicking core, pressing v, and death too!)
+ * Fixed an issue where weather could be impossible to enable
+ * Muted weather when disabled
+ * Added command center configuration warnings, toggleable with a setting
+ * Removed !fuel command as it's no longer needed
+ * Added !cc to quickly change the config of a command center
  * Other various improvements
 
 # Version 6.6.0
