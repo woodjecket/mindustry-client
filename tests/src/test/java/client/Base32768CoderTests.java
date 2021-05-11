@@ -20,7 +20,13 @@ public class Base32768CoderTests {
             r.nextBytes(bytes);
             String encoded = Base32768Coder.INSTANCE.encode(bytes);
             byte[] decoded = Base32768Coder.INSTANCE.decode(encoded);
-            Assertions.assertArrayEquals(bytes, decoded);
+            try {
+                Assertions.assertArrayEquals(bytes, decoded);
+            } catch (AssertionError e) {
+                System.out.println(Arrays.toString(bytes));
+                System.out.println(Arrays.toString(decoded));
+                throw e;
+            }
         }
 
         byte[] bytes = new byte[1024 * 1024];

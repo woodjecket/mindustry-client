@@ -25,30 +25,40 @@ object Base32768Coder {
     fun encodedLengthOf(bytes: Int) = ((bytes * 8.0) / BITS).ceil()
 
     fun encode(input: ByteArray): String {
-//        val bitSize = input.size * 8
-//        val charSize = ceil(bitSize.toDouble() / BITS).toInt()
-//        val newSize = (charSize * BITS) / 8
-        val out = CharArray(encodedLengthOf(input.size) + 5) { 128.toChar() }
-        val buffer = RandomAccessInputStream(input.plus(0).plus(0))
+        // Create output array
+        val out = CharArray(encodedLengthOf(input.size))
+        // Create bit stream from input
+        val buffer = RandomAccessInputStream(input.plus(listOf(0, 0)))
 
         for (index in out.indices) {
-            if (buffer.available() < 1) break
+            // Get [BITS] bits out of the stream and add 128 to avoid ASCII control chars
             out[index] = buffer.readBits(BITS).toChar() + 128
         }
 
-        return String(input.size.toBytes().map { it.toChar() + 128 }.toCharArray()) + out.concatToString()
+        // Include encoded length as 4 chars each representing 1 byte
+        val lengthEncoded = String(input.size.toBytes().map { it.toChar() + 128 }.toCharArray())
+        return lengthEncoded + out.concatToString()
     }
 
     @Throws(IOException::class)
     fun decode(input: String): ByteArray {
-        val size = input.slice(0 until 4).toCharArray().map { (it - 128).toByte() }.toByteArray().toInt()
-        val array = ByteArray(size)
-        val buffer = RandomAccessOutputStream(array)
+        if (input.length < 4) throw IOException("String does not have length prefix!")
+        try {
+            // Extract length
+            val size = input.slice(0 until 4).toCharArray().map { (it - 128).toByte() }.toByteArray().toInt()
+            // Create output
+            val array = ByteArray(size)
+            // Create bit stream leading to output array
+            val buffer = RandomAccessOutputStream(array)
 
-        for (c in input.drop(4)) {
-            buffer.writeBits((c.toInt() - 128), BITS)
+            for (c in input.drop(4)) {
+                // Take each char, reverse the transform, and add it to the bit stream
+                buffer.writeBits((c.toInt() - 128), BITS)
+            }
+
+            return array
+        } catch (e: Exception) {
+            throw IOException(e)
         }
-
-        return array
     }
 }
