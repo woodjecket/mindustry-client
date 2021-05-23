@@ -2,8 +2,10 @@ package mindustry.client
 
 import arc.*
 import arc.graphics.*
+import arc.input.KeyCode
 import arc.math.*
 import arc.util.*
+import mindustry.Vars
 import mindustry.Vars.*
 import mindustry.client.ClientVars.*
 import mindustry.client.Main.setPluginNetworking
@@ -101,6 +103,9 @@ object Client {
             } catch (e: Exception) {
                 Log.err(e)
             }
+        }
+        if (control?.input?.keyDown(KeyCode.asterisk) == true) {
+            PowerGraphDialog().show()
         }
     }
 

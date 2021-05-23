@@ -846,7 +846,11 @@ public class DesktopInput extends InputHandler{
             }
 
             if(omni || true){
-                unit.moveAt(movement);
+                if (input.ctrl() && input.shift()) {
+                    unit.vel.set(movement).setLength(unit.realSpeed());
+                } else {
+                    unit.moveAt(movement);
+                }
             }else{
                 unit.moveAt(Tmp.v2.trns(unit.rotation, movement.len()));
                 if(!movement.isZero()){
