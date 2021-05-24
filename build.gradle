@@ -375,7 +375,8 @@ project(":core"){
         api "com.github.Anuken:rhino:$rhinoVersion"
         if(localArc() && debugged()) api arcModule("extensions:recorder")
 
-        implementation group: 'org.bouncycastle', name: 'bcprov-jdk15on', version: '1.68'
+        implementation group: 'org.bouncycastle', name: 'bcpkix-jdk15on', version: '1.68'
+        implementation group: 'org.bouncycastle', name: 'bctls-jdk15on', version: '1.68'
         implementation group: 'com.beust', name: 'klaxon', version: '5.4'  // Yes, I'm aware arc has a json system, but I don't know how to use it.
 //        implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.3' Not used anywhere, commented to reduce jar size
 
