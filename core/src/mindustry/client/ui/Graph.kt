@@ -30,6 +30,7 @@ class Graph(vararg val series: Series) : Element() {
         }
 
         @JvmInline
+        @OptIn(ExperimentalUnsignedTypes::class)
         value class DatapointArray private constructor(private val array: ULongArray) : Collection<Datapoint> {
 
             constructor(items: Collection<Datapoint>) : this(items.map { it.data }.toULongArray())

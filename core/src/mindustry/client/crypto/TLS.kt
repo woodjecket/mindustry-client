@@ -1,148 +1,203 @@
 package mindustry.client.crypto
 
-import org.bouncycastle.asn1.x500.X500Name
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.bouncycastle.asn1.x500.X500NameBuilder
 import org.bouncycastle.asn1.x500.style.BCStyle
+import org.bouncycastle.asn1.x509.Extension
+import org.bouncycastle.asn1.x509.GeneralName
+import org.bouncycastle.asn1.x509.GeneralNames
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.crypto.generators.RSAKeyPairGenerator
 import org.bouncycastle.crypto.params.RSAKeyGenerationParameters
 import org.bouncycastle.crypto.params.RSAKeyParameters
 import org.bouncycastle.crypto.params.RSAPrivateCrtKeyParameters
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
-import org.bouncycastle.tls.*
-import org.bouncycastle.tls.crypto.TlsCryptoParameters
-import org.bouncycastle.tls.crypto.impl.bc.BcTlsCertificate
-import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto
-import org.bouncycastle.tls.crypto.impl.bc.BcTlsRSASigner
 import java.io.*
 import java.math.BigInteger
-import java.nio.ByteBuffer
-import java.security.KeyFactory
-import java.security.KeyStore
-import java.security.PrivateKey
-import java.security.PublicKey
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.security.*
 import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
 import java.security.spec.RSAPrivateCrtKeySpec
 import java.security.spec.RSAPublicKeySpec
 import java.util.*
+import javax.net.ServerSocketFactory
+import javax.net.SocketFactory
+import javax.net.ssl.*
+import kotlin.concurrent.thread
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 
-object TLS {
-    private val crypto = BcTlsCrypto(Crypto.random)
-    private val keyStore = KeyStore.getInstance(KeyStore.getDefaultType())
+fun certToKeyStore(certificate: X509Certificate, key: PrivateKey? = null, password: String = "abc123"): KeyStore {
+    val keyStore = KeyStore.getInstance("PKCS12", "BC")
+    keyStore.load(null, password.toCharArray())
+    val certChain = arrayOf(certificate)
+    if (key != null) keyStore.setKeyEntry("key", key, password.toCharArray(), certChain)
+    keyStore.setCertificateEntry("cert", certificate)
+    return keyStore
+}
 
-    fun rsaKeyPair(): FullRSAPair {
-        val keyGen = RSAKeyPairGenerator()
-        keyGen.init(RSAKeyGenerationParameters(BigInteger("65537"), Crypto.random, 4096, 80))
-        val parameters = keyGen.generateKeyPair()
+fun rsaKeyPair(): KeyPair {
+    val keyGen = RSAKeyPairGenerator()
+    keyGen.init(RSAKeyGenerationParameters(BigInteger("65537"), Crypto.random, 4096, 80))
+    val parameters = keyGen.generateKeyPair()
 
-        val publicRaw  = parameters.public as RSAKeyParameters
-        val privateRaw = parameters.private as RSAPrivateCrtKeyParameters
+    val publicRaw  = parameters.public as RSAKeyParameters
+    val privateRaw = parameters.private as RSAPrivateCrtKeyParameters
 
-        val public  = KeyFactory.getInstance("RSA").generatePublic(RSAPublicKeySpec(publicRaw.modulus, publicRaw.exponent))
-        val private = KeyFactory.getInstance("RSA").generatePrivate(RSAPrivateCrtKeySpec(publicRaw.modulus, publicRaw.exponent, privateRaw.exponent, privateRaw.p, privateRaw.q, privateRaw.dp, privateRaw.dq, privateRaw.qInv))
-        return FullRSAPair(publicRaw, privateRaw, public, private)
+    val public  = KeyFactory.getInstance("RSA").generatePublic(RSAPublicKeySpec(publicRaw.modulus, publicRaw.exponent))
+    val private = KeyFactory.getInstance("RSA").generatePrivate(RSAPrivateCrtKeySpec(publicRaw.modulus, publicRaw.exponent, privateRaw.exponent, privateRaw.p, privateRaw.q, privateRaw.dp, privateRaw.dq, privateRaw.qInv))
+    return KeyPair(public, private)
+}
+
+abstract class TLSPeer(protected val key: PrivateKey, protected val certificate: X509Certificate, protected val trusted: KeyStore) : Closeable {
+    protected val context: SSLContext
+    var socket: Socket? = null
+        protected set
+    abstract val input: InputStream
+    abstract val output: OutputStream
+
+    protected companion object {
+        var lastPort = 20_000
     }
 
-    fun selfSigned(name: String, keyPair: FullRSAPair): Certificate {
-        val domain = X500NameBuilder(BCStyle.INSTANCE).addRDN(BCStyle.NAME, name).build()
-        val time = System.currentTimeMillis()
-        val serialNum = BigInteger(Random.nextLong().absoluteValue.toString())  // todo: secure???
+    init {
+        val password = "abc123".toCharArray()  // It stays in memory so this is ok
 
-        val calendar = Calendar.getInstance()
-        calendar.time = Date(time)
-        val start = calendar.time
-        calendar.add(Calendar.YEAR, 2)  // Expires in 2 years
-        val end = calendar.time
+        val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+        tmf.init(trusted)
 
-        val algorithm = "SHA512withRSA"
-        val signer = JcaContentSignerBuilder(algorithm).build(keyPair.private)
+        val keyStore = certToKeyStore(certificate, key)
 
-        val certBuilder = JcaX509v3CertificateBuilder(domain, serialNum, start, end, domain, keyPair.public)
-        return Certificate(arrayOf(BcTlsCertificate(crypto, certBuilder.build(signer).toASN1Structure())))
-    }
-
-    data class FullRSAPair(
-        val publicParams: RSAKeyParameters,
-        val privateParams: RSAPrivateCrtKeyParameters,
-        val public: PublicKey,
-        val private: PrivateKey
-    )
-
-    class TLSServer(val pair: FullRSAPair, val cert: Certificate, val input: InputStream, val output: OutputStream) {
-        private val tlsServerProtocol = TlsServerProtocol(input, output)
-
-        fun accept() {
-            tlsServerProtocol.accept(object : DefaultTlsServer(BcTlsCrypto(Crypto.random)) {
-                @Throws(IOException::class)
-                override fun getRSASignerCredentials(): TlsCredentialedSigner {
-                    return DefaultTlsCredentialedSigner(
-                        TlsCryptoParameters(context),
-                        BcTlsRSASigner(
-                            crypto as BcTlsCrypto,
-                            pair.private as RSAKeyParameters,
-                            pair.public as RSAKeyParameters
-                        ),
-                        cert,
-                        SignatureAndHashAlgorithm.rsa_pss_pss_sha512
-                    )
-                }
-            })
-        }
-    }
-
-    class TLSClient(val input: InputStream, val output: OutputStream) {
-        private val tlsClientProtocol = TlsClientProtocol(input, output)
-
-        fun connect() {
-            tlsClientProtocol.connect(object : DefaultTlsClient(BcTlsCrypto(Crypto.random)) {
-                override fun getAuthentication(): TlsAuthentication {
-                    return object : ServerOnlyTlsAuthentication() {
-                        override fun notifyServerCertificate(serverCertificate: TlsServerCertificate?) {
-                            validate(serverCertificate?.certificate ?: throw IOException("Certificate cannot be null!"))
-                        }
-                    }
-                }
-            })
-        }
-    }
-
-    fun validate(cert: Certificate) {
-        val encoded = cert.certificateList.firstOrNull()?.encoded ?: throw IllegalArgumentException("Empty certificate list!")
-        val jsCert = CertificateFactory.getInstance("X.509").generateCertificate(encoded.inputStream())
-        keyStore.getCertificateAlias(jsCert) ?: throw IOException("Unknown certificate '$jsCert'!")
+        val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+        kmf.init(keyStore, password)
+        context = SSLContext.getInstance("TLS")
+        context.init(
+            kmf.keyManagers, tmf.trustManagers,
+            SecureRandom.getInstanceStrong()
+        )
     }
 }
 
-private class InputOutputStream {
-    private val buffer = ByteBuffer.allocate(4096)
-    val input = object : InputStream() {
-        override fun read(): Int {
-            return buffer.get().toInt() + 128
+class TLSServer(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore) : TLSPeer(key, certificate, trusted) {
+    private val serverSocket: SSLServerSocket
+
+    override lateinit var input: InputStream
+    override lateinit var output: OutputStream
+
+    init {
+        val sock = SocketFactory.getDefault().createSocket()
+        val port = lastPort++
+        serverSocket = context.serverSocketFactory.createServerSocket(port) as SSLServerSocket
+        serverSocket.needClientAuth = true
+        serverSocket.enabledProtocols = arrayOf("TLSv1.3")
+
+        runBlocking {
+            launch(Dispatchers.IO) { socket = serverSocket.accept() }
+            sock.connect(InetSocketAddress("127.0.0.1", port))
+            input = sock.getInputStream()
+            output = sock.getOutputStream()
         }
     }
 
-    val output = object : OutputStream() {
-        override fun write(b: Int) {
-            buffer.put((b - 120).toByte())
+    override fun close() {
+        socket?.close()
+        serverSocket.close()
+        socket = null
+    }
+}
+
+class TLSClient(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore) : TLSPeer(key, certificate, trusted) {
+    override lateinit var input: InputStream
+        private set
+    override lateinit var output: OutputStream
+        private set
+
+    init {
+        val factory: SocketFactory = context.socketFactory
+        val port = lastPort++
+
+        val server = ServerSocketFactory.getDefault().createServerSocket(port)
+
+        runBlocking {
+            launch(Dispatchers.IO) {
+                val sock = server.accept()
+                input = sock.getInputStream()
+                output = sock.getOutputStream()
+            }
+            val connection = factory.createSocket("127.0.0.1", port) as SSLSocket
+            connection.enabledProtocols = arrayOf("TLSv1.3")
+            val sslParams = SSLParameters()
+            sslParams.endpointIdentificationAlgorithm = "HTTPS"
+            connection.sslParameters = sslParams
+            socket = connection
         }
     }
+
+    override fun close() {
+        socket?.close()
+        socket = null
+    }
+}
+
+fun generateCert(name: String, keyPair: KeyPair): X509Certificate {
+    val domain = X500NameBuilder(BCStyle.INSTANCE).addRDN(BCStyle.NAME, name).build()
+    val time = System.currentTimeMillis()
+    val serialNum = BigInteger(Random.nextLong().absoluteValue.toString())
+
+    val calendar = Calendar.getInstance()
+    calendar.time = Date(time)
+    val start = calendar.time
+    calendar.add(Calendar.YEAR, 2)  // Expires in 2 years
+    val end = calendar.time
+
+    val algorithm = "SHA512withRSA"
+    val signer = JcaContentSignerBuilder(algorithm).build(keyPair.private)
+
+    val certBuilder = JcaX509v3CertificateBuilder(domain, serialNum, start, end, domain, keyPair.public)
+
+    certBuilder.addExtension(Extension.subjectAlternativeName, false, GeneralNames(GeneralName(GeneralName.iPAddress, "127.0.0.1")))
+
+    val factory = CertificateFactory.getInstance("X.509", "BC")
+    return factory.generateCertificate(certBuilder.build(signer).encoded.inputStream()) as X509Certificate
 }
 
 fun main() {
-    val oneKey = TLS.rsaKeyPair()
-    val twoKey = TLS.rsaKeyPair()
+    Security.addProvider(BouncyCastleProvider())
+    val clientKey = rsaKeyPair()
+    val clientCert = generateCert("client", clientKey)
+    val serverKey = rsaKeyPair()
+    val serverCert = generateCert("server", serverKey)
 
-    val oneCert = TLS.selfSigned("one", oneKey)
-    val twoCert = TLS.selfSigned("two", twoKey)
+    val client = TLSClient(clientKey.private, clientCert, certToKeyStore(serverCert))
+    val server = TLSServer(serverKey.private, serverCert, certToKeyStore(clientCert))
 
-    val oneToTwo = InputOutputStream()
-    val twoToOne = InputOutputStream()
+    thread {
+        while (true) {
+            val read1 = client.input.readNBytes(client.input.available())
+            val read2 = server.input.readNBytes(server.input.available())
+            if (read1.size + read2.size > 0) println("Up: ${read1.size}B   Down: ${read2.size}B")
+            Thread.sleep(500)
+            server.output.write(read1)
+            client.output.write(read2)
+        }
+    }
 
-    val one = TLS.TLSServer(oneKey, oneCert, twoToOne.input, oneToTwo.output)
-    val two = TLS.TLSClient(oneToTwo.input, twoToOne.output)
+    thread {
+        val out = PrintWriter(server.socket!!.getOutputStream(), true)
+        while (true) {
+            out.println("Hello World!")
+            Thread.sleep(1000)
+        }
+    }
 
-    one.accept()
-    two.connect()
+    val input = BufferedReader(InputStreamReader(client.socket!!.inputStream))
+    while (true) {
+        val item = input.readLine() ?: continue
+        println("Got '$item'")
+    }
 }
