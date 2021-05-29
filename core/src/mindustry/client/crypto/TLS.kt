@@ -3,11 +3,13 @@ package mindustry.client.crypto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x500.X500NameBuilder
 import org.bouncycastle.asn1.x500.style.BCStyle
 import org.bouncycastle.asn1.x509.Extension
 import org.bouncycastle.asn1.x509.GeneralName
 import org.bouncycastle.asn1.x509.GeneralNames
+import org.bouncycastle.cert.X509v3CertificateBuilder
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.crypto.generators.RSAKeyPairGenerator
 import org.bouncycastle.crypto.params.RSAKeyGenerationParameters
@@ -41,12 +43,13 @@ fun certToKeyStore(certificate: X509Certificate, key: PrivateKey? = null, passwo
     return keyStore
 }
 
+/** Generates a 4096 bit RSA keypair (future proof for a while).  Takes some time, so it's wise to run it in a thread/coroutine. */
 fun rsaKeyPair(): KeyPair {
     val keyGen = RSAKeyPairGenerator()
     keyGen.init(RSAKeyGenerationParameters(BigInteger("65537"), Crypto.random, 4096, 80))
     val parameters = keyGen.generateKeyPair()
 
-    val publicRaw  = parameters.public as RSAKeyParameters
+    val publicRaw  = parameters.public  as RSAKeyParameters
     val privateRaw = parameters.private as RSAPrivateCrtKeyParameters
 
     val public  = KeyFactory.getInstance("RSA").generatePublic(RSAPublicKeySpec(publicRaw.modulus, publicRaw.exponent))
@@ -54,11 +57,15 @@ fun rsaKeyPair(): KeyPair {
     return KeyPair(public, private)
 }
 
+/** Base class for a TLS peer. */
 abstract class TLSPeer(protected val key: PrivateKey, protected val certificate: X509Certificate, protected val trusted: KeyStore) : Closeable {
     protected val context: SSLContext
+    /** The inner, secured socket. */
     var socket: Socket? = null
         protected set
+    /** The input stream over which TLS will be tunneled. */
     abstract val input: InputStream
+    /** The input stream over which TLS will be tunneled. */
     abstract val output: OutputStream
 
     protected companion object {
@@ -83,11 +90,14 @@ abstract class TLSPeer(protected val key: PrivateKey, protected val certificate:
     }
 }
 
+/** A TLS server. */
 class TLSServer(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore) : TLSPeer(key, certificate, trusted) {
     private val serverSocket: SSLServerSocket
 
     override lateinit var input: InputStream
+        private set
     override lateinit var output: OutputStream
+        private set
 
     init {
         val sock = SocketFactory.getDefault().createSocket()
@@ -111,6 +121,7 @@ class TLSServer(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore
     }
 }
 
+/** A TLS client. */
 class TLSClient(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore) : TLSPeer(key, certificate, trusted) {
     override lateinit var input: InputStream
         private set
@@ -121,6 +132,7 @@ class TLSClient(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore
         val factory: SocketFactory = context.socketFactory
         val port = lastPort++
 
+        // Create internal socket server for the tls client to connect to.  This is needed to get the input and output streams.
         val server = ServerSocketFactory.getDefault().createServerSocket(port)
 
         runBlocking {
@@ -129,6 +141,7 @@ class TLSClient(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore
                 input = sock.getInputStream()
                 output = sock.getOutputStream()
             }
+            // Connect to the internal server with a TLS socket
             val connection = factory.createSocket("127.0.0.1", port) as SSLSocket
             connection.enabledProtocols = arrayOf("TLSv1.3")
             val sslParams = SSLParameters()
@@ -144,8 +157,12 @@ class TLSClient(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore
     }
 }
 
-fun generateCert(name: String, keyPair: KeyPair): X509Certificate {
-    val domain = X500NameBuilder(BCStyle.INSTANCE).addRDN(BCStyle.NAME, name).build()
+/**
+ * Generates an X509 certificate with the specified domain name and keypair.  The certificate expires in two years
+ * and uses the SHA512withRSA signature algorithm.  It is valid for 127.0.0.1.
+ */
+fun generateCert(name: String, keyPair: KeyPair, ca: Pair<X509Certificate, KeyPair>? = null): X509Certificate {
+    val domain = /*X500NameBuilder(BCStyle.INSTANCE).addRDN(BCStyle.NAME, name).build()*/ X500Name("CN=$name")
     val time = System.currentTimeMillis()
     val serialNum = BigInteger(Random.nextLong().absoluteValue.toString())
 
@@ -156,9 +173,12 @@ fun generateCert(name: String, keyPair: KeyPair): X509Certificate {
     val end = calendar.time
 
     val algorithm = "SHA512withRSA"
-    val signer = JcaContentSignerBuilder(algorithm).build(keyPair.private)
+    val signer = JcaContentSignerBuilder(algorithm).build(ca?.second?.private ?: keyPair.private)
 
-    val certBuilder = JcaX509v3CertificateBuilder(domain, serialNum, start, end, domain, keyPair.public)
+    val certBuilder = JcaX509v3CertificateBuilder(
+        if (ca != null) X500Name("CN=${ca.first.subjectDN.name.removePrefix("Name=")}") else domain,
+        serialNum, start, end, domain, keyPair.public
+    )
 
     certBuilder.addExtension(Extension.subjectAlternativeName, false, GeneralNames(GeneralName(GeneralName.iPAddress, "127.0.0.1")))
 
@@ -168,12 +188,16 @@ fun generateCert(name: String, keyPair: KeyPair): X509Certificate {
 
 fun main() {
     Security.addProvider(BouncyCastleProvider())
+
+    val caKey = rsaKeyPair()
+    val caCert = generateCert("ca", caKey)
+
     val clientKey = rsaKeyPair()
     val clientCert = generateCert("client", clientKey)
     val serverKey = rsaKeyPair()
-    val serverCert = generateCert("server", serverKey)
+    val serverCert = generateCert("server", serverKey, Pair(caCert, caKey))
 
-    val client = TLSClient(clientKey.private, clientCert, certToKeyStore(serverCert))
+    val client = TLSClient(clientKey.private, clientCert, certToKeyStore(caCert))
     val server = TLSServer(serverKey.private, serverCert, certToKeyStore(clientCert))
 
     thread {

@@ -21,6 +21,9 @@ object Main : ApplicationListener {
     lateinit var communicationClient: Packets.CommunicationClient
     private var dispatchedBuildPlans = mutableListOf<BuildPlan>()
     private val buildPlanInterval = Interval()
+    val tlsSessions = mutableListOf<TLSSession>()
+
+    data class TLSSession(val player: Int, val peer: TLSPeer, var tunneled: TunneledCommunicationSystem?)
 
     /** Run on client load. */
     override fun init() {
@@ -67,6 +70,11 @@ object Main : ApplicationListener {
                             path.networkAssist.add(plan)
                         }
                     }
+                }
+                is TLSRequest -> {
+                    if (transmission.destination != communicationSystem.id) return@addListener
+                    val peer = TLSClient(TODO(), TODO(), TODO())
+                    tlsSessions.add(TLSSession(senderId, peer, null))
                 }
             }
         }

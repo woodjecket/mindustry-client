@@ -1,6 +1,6 @@
 package mindustry.client.communication
 
-/** An interface for ways to transmit information between clients. */
+/** An abstract class for ways to transmit information between clients. */
 abstract class CommunicationSystem {
     /** List of lambdas to run when a message is received. */
     protected abstract val listeners: MutableList<(input: ByteArray, sender: Int) -> Unit>

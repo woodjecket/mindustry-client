@@ -18,7 +18,9 @@ object Packets {
         RegisteredTransmission(DummyTransmission::class, ::DummyTransmission),
         RegisteredTransmission(SignatureTransmission::class, ::SignatureTransmission),
         RegisteredTransmission(EncryptedMessageTransmission::class, ::EncryptedMessageTransmission),
-        RegisteredTransmission(BuildQueueTransmission::class, ::BuildQueueTransmission)
+        RegisteredTransmission(BuildQueueTransmission::class, ::BuildQueueTransmission),
+        RegisteredTransmission(TLSRequest::class, ::TLSRequest),
+        RegisteredTransmission(TLSTransmission::class, ::TLSTransmission)
     )
 
     private data class RegisteredTransmission<T : Transmission>(val type: KClass<T>, val constructor: (content: ByteArray, id: Long) -> T)
@@ -111,7 +113,7 @@ object Packets {
 
     /**
      * Handles sending and receiving [Transmission]s on a [CommunicationSystem].
-     * There should only be one of these per communication system to avoid exceeding the rate.
+     * There should only be one of these per communication system to avoid exceeding the ratelimit.
      */
     class CommunicationClient(val communicationSystem: CommunicationSystem) {
         val inUse get() = !lastSent.check(0, 60f) // 1s
