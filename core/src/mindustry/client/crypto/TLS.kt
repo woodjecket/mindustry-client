@@ -4,12 +4,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.bouncycastle.asn1.x500.X500Name
-import org.bouncycastle.asn1.x500.X500NameBuilder
-import org.bouncycastle.asn1.x500.style.BCStyle
-import org.bouncycastle.asn1.x509.Extension
-import org.bouncycastle.asn1.x509.GeneralName
-import org.bouncycastle.asn1.x509.GeneralNames
+import org.bouncycastle.asn1.x509.*
+import org.bouncycastle.cert.X509CertificateHolder
 import org.bouncycastle.cert.X509v3CertificateBuilder
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.crypto.generators.RSAKeyPairGenerator
 import org.bouncycastle.crypto.params.RSAKeyGenerationParameters
@@ -22,7 +20,6 @@ import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.*
-import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.security.spec.RSAPrivateCrtKeySpec
 import java.security.spec.RSAPublicKeySpec
@@ -33,6 +30,7 @@ import javax.net.ssl.*
 import kotlin.concurrent.thread
 import kotlin.math.absoluteValue
 import kotlin.random.Random
+
 
 fun certToKeyStore(certificate: X509Certificate, key: PrivateKey? = null, password: String = "abc123"): KeyStore {
     val keyStore = KeyStore.getInstance("PKCS12", "BC")
@@ -161,29 +159,44 @@ class TLSClient(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore
  * Generates an X509 certificate with the specified domain name and keypair.  The certificate expires in two years
  * and uses the SHA512withRSA signature algorithm.  It is valid for 127.0.0.1.
  */
-fun generateCert(name: String, keyPair: KeyPair, ca: Pair<X509Certificate, KeyPair>? = null): X509Certificate {
-    val domain = /*X500NameBuilder(BCStyle.INSTANCE).addRDN(BCStyle.NAME, name).build()*/ X500Name("CN=$name")
+fun generateCert(name: String, keyPair: KeyPair, ca: Pair<X509Certificate, KeyPair>? = null, expiryYears: Int = 5): X509Certificate {
+    val domain = X500Name("C=AQ, O=$name, OU=Cert")  // prepare to be forcibly relocated to antarctica
     val time = System.currentTimeMillis()
     val serialNum = BigInteger(Random.nextLong().absoluteValue.toString())
 
     val calendar = Calendar.getInstance()
     calendar.time = Date(time)
     val start = calendar.time
-    calendar.add(Calendar.YEAR, 2)  // Expires in 2 years
+    calendar.add(Calendar.YEAR, expiryYears)
     val end = calendar.time
 
-    val algorithm = "SHA512withRSA"
-    val signer = JcaContentSignerBuilder(algorithm).build(ca?.second?.private ?: keyPair.private)
-
-    val certBuilder = JcaX509v3CertificateBuilder(
-        if (ca != null) X500Name("CN=${ca.first.subjectDN.name.removePrefix("Name=")}") else domain,
-        serialNum, start, end, domain, keyPair.public
+    val v3Bldr: X509v3CertificateBuilder = JcaX509v3CertificateBuilder(
+        ca?.first?.subjectDN?.name?.run { X500Name(this) } ?: domain,
+        serialNum,
+        start, end,
+        domain,
+        keyPair.public
     )
 
-    certBuilder.addExtension(Extension.subjectAlternativeName, false, GeneralNames(GeneralName(GeneralName.iPAddress, "127.0.0.1")))
+    v3Bldr.addExtension(
+        Extension.subjectAlternativeName,
+        false,
+        GeneralNames(GeneralName(GeneralName.iPAddress, "127.0.0.1"))
+    )
 
-    val factory = CertificateFactory.getInstance("X.509", "BC")
-    return factory.generateCertificate(certBuilder.build(signer).encoded.inputStream()) as X509Certificate
+    // If it's self-signed, make it a CA
+    if (ca == null) v3Bldr.addExtension(
+        Extension.basicConstraints,
+        false,
+        BasicConstraints(true)
+    )
+
+    val certHldr: X509CertificateHolder =
+        v3Bldr.build(
+            JcaContentSignerBuilder("SHA512WithRSA").setProvider("BC").build(ca?.second?.private ?: keyPair.private)
+        )
+
+    return JcaX509CertificateConverter().setProvider("BC").getCertificate(certHldr)
 }
 
 fun main() {

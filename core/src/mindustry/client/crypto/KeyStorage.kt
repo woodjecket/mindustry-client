@@ -2,13 +2,14 @@ package mindustry.client.crypto
 
 import java.io.File
 import java.security.KeyStore
+import java.security.cert.X509Certificate
 
 class KeyStorage(val dataDir: File) {
     val trustStore: KeyStore = KeyStore.getInstance("BKS", "BC")
     val store: KeyStore = KeyStore.getInstance("BKS", "BC")
+    private val password = "abc123"  // maybe fix?
 
     init {
-        val password = "abc123"  // maybe fix?
         if (dataDir.resolve("trusted").exists()) {
             trustStore.load(dataDir.resolve("trusted").inputStream(), null)
         } else {
@@ -30,8 +31,15 @@ class KeyStorage(val dataDir: File) {
 
         store.setCertificateEntry("cert", cert)
         store.setKeyEntry("key", pair.private, "abc123".toCharArray(), arrayOf(cert))
+        save()
+    }
+
+    fun addTrusted(certificate: X509Certificate) {
+        trustStore.setCertificateEntry(certificate.subjectDN.name, certificate)
     }
 
     fun save() {
+        store.store(dataDir.resolve("key").outputStream(), password.toCharArray())
+        trustStore.store(dataDir.resolve("trusted").outputStream(), null)
     }
 }
