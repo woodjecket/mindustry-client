@@ -4,6 +4,7 @@ import arc.*
 import arc.math.geom.*
 import arc.struct.*
 import arc.util.Interval
+import kotlinx.coroutines.*
 import mindustry.*
 import mindustry.client.antigrief.*
 import mindustry.client.communication.*
@@ -13,6 +14,7 @@ import mindustry.client.ui.*
 import mindustry.client.utils.*
 import mindustry.entities.units.*
 import mindustry.game.*
+import mindustry.gen.Groups
 import mindustry.input.*
 
 object Main : ApplicationListener {
@@ -22,8 +24,12 @@ object Main : ApplicationListener {
     private var dispatchedBuildPlans = mutableListOf<BuildPlan>()
     private val buildPlanInterval = Interval()
     val tlsSessions = mutableListOf<TLSSession>()
+    val mainScope = MainScope()
+    var keyStorage: KeyStorage? = null
 
-    data class TLSSession(val player: Int, val peer: TLSPeer, var tunneled: TunneledCommunicationSystem?)
+    data class TLSSession(val player: Int, val peer: TLS.TLSPeer, var tunneled: TunneledCommunicationSystem?) {
+        val stale get() = Groups.player?.getByID(player) == null
+    }
 
     /** Run on client load. */
     override fun init() {
@@ -33,6 +39,9 @@ object Main : ApplicationListener {
             communicationSystem.init()
 
             TileRecords.initialize()
+
+            val setting = Core.settings.getString("certificateName", null)
+            if (setting != null) keyStorage = KeyStorage(Core.settings.dataDirectory.file(), setting)
         } else {
             communicationSystem = SwitchableCommunicationSystem(DummyCommunicationSystem(mutableListOf()))
             communicationSystem.init()
@@ -73,9 +82,21 @@ object Main : ApplicationListener {
                 }
                 is TLSRequest -> {
                     if (transmission.destination != communicationSystem.id) return@addListener
-                    val peer = TLSClient(TODO(), TODO(), TODO())
-                    tlsSessions.add(TLSSession(senderId, peer, null))
+                    val store = keyStorage ?: return@addListener
+                    val key = store.key(transmission.serialNum) ?: return@addListener
+                    val cert = store.cert(transmission.serialNum) ?: return@addListener
+
+                    val peer = TLS.TLSClient(key, cert, store.trustStore)
+                    tlsSessions.add(TLSSession(senderId, peer, TunneledCommunicationSystem(1024, 1f, peer.socket!!.getInputStream(), peer.socket!!.getOutputStream())))
                 }
+            }
+        }
+
+        // Periodically clear out tlsSessions
+        mainScope.launch {
+            while (true) {
+                tlsSessions.removeIf { it.stale }
+                delay(1000)
             }
         }
     }

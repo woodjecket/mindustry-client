@@ -1,45 +1,67 @@
 package mindustry.client.crypto
 
+import mindustry.client.crypto.TLS.ecKeyPair
+import mindustry.client.crypto.TLS.generateCert
 import java.io.File
+import java.math.BigInteger
+import java.security.KeyPair
 import java.security.KeyStore
+import java.security.PrivateKey
 import java.security.cert.X509Certificate
 
-class KeyStorage(val dataDir: File) {
-    val trustStore: KeyStore = KeyStore.getInstance("BKS", "BC")
-    val store: KeyStore = KeyStore.getInstance("BKS", "BC")
+class KeyStorage(val dataDir: File, name: String) {
+    val trustStore: KeyStore = KeyStore.getInstance("PKCS12", "BC")
+    val store: KeyStore = KeyStore.getInstance("PKCS12", "BC")
     private val password = "abc123"  // maybe fix?
 
+    companion object {
+        const val TRUST_STORE_FILENAME = "trusted"
+        const val KEY_STORE_FILENAME = "key"
+    }
+
     init {
-        if (dataDir.resolve("trusted").exists()) {
-            trustStore.load(dataDir.resolve("trusted").inputStream(), null)
+        if (dataDir.resolve(TRUST_STORE_FILENAME).exists()) {
+            trustStore.load(dataDir.resolve(TRUST_STORE_FILENAME).inputStream(), null)
         } else {
             trustStore.load(null, null)
         }
 
-        if (dataDir.resolve("key").exists()) {
-            store.load(dataDir.resolve("key").inputStream(), password.toCharArray())
+        if (dataDir.resolve(KEY_STORE_FILENAME).exists()) {
+            store.load(dataDir.resolve(KEY_STORE_FILENAME).inputStream(), password.toCharArray())
         } else {
             store.load(null, password.toCharArray())
+            genKey(name)
         }
-    }
 
-    /** Generates a key and certificate (expires in two years), then puts them in [store].  This will take a bit. */
-    fun genKey(name: String) {
-        val pair = rsaKeyPair()
-
-        val cert = generateCert(name, pair)
-
-        store.setCertificateEntry("cert", cert)
-        store.setKeyEntry("key", pair.private, "abc123".toCharArray(), arrayOf(cert))
         save()
     }
 
-    fun addTrusted(certificate: X509Certificate) {
-        trustStore.setCertificateEntry(certificate.subjectDN.name, certificate)
+    /** Generates a key and certificate (expires in five years), then puts them in [store]. */
+    fun genKey(name: String) {
+        val pair = ecKeyPair()
+
+        val cert = generateCert(name, pair)  // Self signed
+
+        store.setCertificateEntry("cert${cert.serialNumber}", cert)
+        store.setKeyEntry("key${cert.serialNumber}", pair.private, password.toCharArray(), arrayOf(cert))
+        save()
     }
 
+    /** Trusts a given certificate. */
+    fun trust(certificate: X509Certificate) {
+        trustStore.setCertificateEntry("cert${certificate.serialNumber}", certificate)
+    }
+
+    fun untrust(certificate: X509Certificate) {
+        trustStore.deleteEntry("cert${certificate.serialNumber}")
+    }
+
+    fun key(serialNum: BigInteger): PrivateKey? = store.getKey("key$serialNum", password.toCharArray()) as PrivateKey?
+
+    fun cert(serialNum: BigInteger): X509Certificate? = store.getCertificate("cert$serialNum") as X509Certificate?
+
     fun save() {
-        store.store(dataDir.resolve("key").outputStream(), password.toCharArray())
-        trustStore.store(dataDir.resolve("trusted").outputStream(), null)
+        store.store(dataDir.resolve(KEY_STORE_FILENAME).outputStream(), password.toCharArray())
+        trustStore.store(dataDir.resolve(TRUST_STORE_FILENAME).outputStream(), null)
     }
 }
