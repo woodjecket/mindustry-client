@@ -10,11 +10,14 @@ import org.bouncycastle.asn1.x500.RDN
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x500.style.BCStyle
 import org.bouncycastle.asn1.x509.*
+import org.bouncycastle.asn1.x509.Extension
 import org.bouncycastle.cert.X509CertificateHolder
 import org.bouncycastle.cert.bc.BcX509ExtensionUtils
+import org.bouncycastle.cert.jcajce.JcaAttributeCertificateIssuer
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
+import org.bouncycastle.est.jcajce.JcaJceUtils
 import org.bouncycastle.jcajce.provider.asymmetric.edec.KeyPairGeneratorSpi
 import org.bouncycastle.jce.X509KeyUsage
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -26,7 +29,7 @@ import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.*
-import java.security.cert.X509Certificate
+import java.security.cert.*
 import java.util.*
 import javax.net.ServerSocketFactory
 import javax.net.SocketFactory
@@ -36,15 +39,19 @@ import kotlin.random.Random
 
 /**
  * An object containing utilities for using TLSv1.3.
+ *
+ * NOTE: Intermediate certificates are for some reason not working.
  */
 object TLS {
     val random: SecureRandom = SecureRandom.getInstanceStrong()
 
-    fun certToKeyStore(certificate: X509Certificate, key: PrivateKey? = null, password: String = "abc123"): KeyStore {
-        val keyStore = KeyStore.getInstance("BCFKS", "BC")
+    fun certToKeyStore(certificate: X509Certificate, certChain: Array<X509Certificate> = arrayOf(certificate), key: PrivateKey? = null, password: String = "abc123"): KeyStore {
+        val keyStore = KeyStore.getInstance("pkcs12", "BC")
         keyStore.load(null, password.toCharArray())
-        val certChain = arrayOf(certificate)
         if (key != null) keyStore.setKeyEntry("key", key, password.toCharArray(), certChain)
+//        for (cert in certChain) {
+//            keyStore.setCertificateEntry("cert${cert.serialNumber}", cert)
+//        }
         keyStore.setCertificateEntry("cert", certificate)
         return keyStore
     }
@@ -58,7 +65,7 @@ object TLS {
      * Base class for a TLS peer.  Provides an [input] and [output] stream and a secure [socket] (null before
      * connected).
      */
-    abstract class TLSPeer(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore) : Closeable {
+    abstract class TLSPeer(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore) : Closeable {
         protected val context: SSLContext
 
         abstract val ready: Boolean
@@ -77,13 +84,15 @@ object TLS {
             var lastPort = 20_000  // note: this will eventually run out
         }
 
+        val store: KeyStore
         init {
             val password = "abc123".toCharArray()  // It stays in memory so this is ok
 
             val tmf = TrustManagerFactory.getInstance("X509", "BCJSSE")
             tmf.init(trusted)
 
-            val keyStore = certToKeyStore(certificate, key)
+            val keyStore = certToKeyStore(certificate, certChain, key)
+            store = keyStore
 
             val kmf = KeyManagerFactory.getInstance("PKIX", "BCJSSE")
             kmf.init(keyStore, password)
@@ -111,7 +120,7 @@ object TLS {
      *
      *  @see TLSPeer
      */
-    class TLSServer(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore) : TLSPeer(key, certificate, trusted) {
+    class TLSServer(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore) : TLSPeer(key, certificate, certChain, trusted) {
         private val serverSocket: SSLServerSocket
 
         override val ready: Boolean
@@ -123,6 +132,7 @@ object TLS {
             private set
 
         init {
+            store.store(File("/tmp/stuff.pkcs12").outputStream(), "abc123".toCharArray())
             val sock = SocketFactory.getDefault().createSocket()
             serverSocket = context.serverSocketFactory.createServerSocket(0) as SSLServerSocket
             serverSocket.needClientAuth = true
@@ -148,7 +158,7 @@ object TLS {
      *
      *  @see TLSPeer
      */
-    class TLSClient(key: PrivateKey, certificate: X509Certificate, trusted: KeyStore) : TLSPeer(key, certificate, trusted) {
+    class TLSClient(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore) : TLSPeer(key, certificate, certChain, trusted) {
         override lateinit var input: InputStream
             private set
         override lateinit var output: OutputStream
@@ -218,7 +228,7 @@ object TLS {
         val end = calendar.time
 
         val v3Bldr = JcaX509v3CertificateBuilder(
-            ca?.first?.subjectDN?.name?.run { X500Name(this) } ?: domain,
+            ca?.first?.subjectX500Principal?.name?.run { X500Name(this) } ?: domain,
             serialNum,
             start, end,
             domain,
@@ -231,7 +241,6 @@ object TLS {
             GeneralNames(GeneralName(GeneralName.iPAddress, "127.0.0.1"))
         )
 
-//        val info = SubjectPublicKeyInfo.getInstance(keyPair.public.encoded)
         v3Bldr.addExtension(
             Extension.subjectKeyIdentifier,
             true,
@@ -242,8 +251,13 @@ object TLS {
             v3Bldr.addExtension(
                 Extension.authorityKeyIdentifier,
                 false,
-//                AuthorityKeyIdentifier(ca.first.getExtensionValue("2.5.29.35"))
                 JcaX509ExtensionUtils().createAuthorityKeyIdentifier(ca.second.public)
+            )
+
+            v3Bldr.addExtension(
+                Extension.certificateIssuer,
+                false,
+                GeneralNames(GeneralName(X500Name(ca.first.subjectX500Principal.name)))
             )
         }
 
@@ -278,11 +292,12 @@ fun main() {
 
     val clientKey = ecKeyPair()
     val clientCert = generateCert("client", clientKey)
+
     val serverKey = ecKeyPair()
     val serverCert = generateCert("server", serverKey, Pair(intCert, intKey))
 
-    val client = TLS.TLSClient(clientKey.private, clientCert, certToKeyStore(caCert))
-    val server = TLS.TLSServer(serverKey.private, serverCert, certToKeyStore(clientCert))
+    val client = TLS.TLSClient(clientKey.private, clientCert, arrayOf(clientCert), certToKeyStore(caCert))
+    val server = TLS.TLSServer(serverKey.private, serverCert, arrayOf(serverCert, intCert, caCert), certToKeyStore(clientCert))
 
     runBlocking {
         launch(Dispatchers.IO) {

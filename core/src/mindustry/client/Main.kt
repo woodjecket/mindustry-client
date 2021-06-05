@@ -86,8 +86,8 @@ object Main : ApplicationListener {
                     val key = store.key(transmission.serialNum) ?: return@addListener
                     val cert = store.cert(transmission.serialNum) ?: return@addListener
 
-                    val peer = TLS.TLSClient(key, cert, store.trustStore)
-                    tlsSessions.add(TLSSession(senderId, peer, TunneledCommunicationSystem(1024, 1f, peer.socket!!.getInputStream(), peer.socket!!.getOutputStream())))
+//                    val peer = TLS.TLSClient(key, cert, store.trustStore)
+//                    tlsSessions.add(TLSSession(senderId, peer, TunneledCommunicationSystem(1024, 1f, peer.socket!!.getInputStream(), peer.socket!!.getOutputStream())))
                 }
             }
         }
