@@ -39,19 +39,14 @@ import kotlin.random.Random
 
 /**
  * An object containing utilities for using TLSv1.3.
- *
- * NOTE: Intermediate certificates are for some reason not working.
  */
 object TLS {
     val random: SecureRandom = SecureRandom.getInstanceStrong()
 
-    fun certToKeyStore(certificate: X509Certificate, certChain: Array<X509Certificate> = arrayOf(certificate), key: PrivateKey? = null, password: String = "abc123"): KeyStore {
+    fun certToKeyStore(certificate: X509Certificate, key: PrivateKey? = null, certChain: Array<X509Certificate>, password: String = "abc123"): KeyStore {
         val keyStore = KeyStore.getInstance("pkcs12", "BC")
         keyStore.load(null, password.toCharArray())
         if (key != null) keyStore.setKeyEntry("key", key, password.toCharArray(), certChain)
-//        for (cert in certChain) {
-//            keyStore.setCertificateEntry("cert${cert.serialNumber}", cert)
-//        }
         keyStore.setCertificateEntry("cert", certificate)
         return keyStore
     }
@@ -84,16 +79,13 @@ object TLS {
             var lastPort = 20_000  // note: this will eventually run out
         }
 
-        val store: KeyStore
         init {
             val password = "abc123".toCharArray()  // It stays in memory so this is ok
 
             val tmf = TrustManagerFactory.getInstance("X509", "BCJSSE")
             tmf.init(trusted)
 
-            val keyStore = certToKeyStore(certificate, certChain, key)
-            store = keyStore
-            println(store.getCertificateChain("key").joinToString("\n\n\n===============\n\n\n"))
+            val keyStore = certToKeyStore(certificate, key, certChain)
 
             val kmf = KeyManagerFactory.getInstance("X509", "BCJSSE")
             kmf.init(keyStore, password)
@@ -133,7 +125,6 @@ object TLS {
             private set
 
         init {
-//            store.store(File("/tmp/stuff.pkcs12").outputStream(), "abc123".toCharArray())
             val sock = SocketFactory.getDefault().createSocket()
             serverSocket = context.serverSocketFactory.createServerSocket(0) as SSLServerSocket
             serverSocket.needClientAuth = true
@@ -206,7 +197,6 @@ object TLS {
         ca: Pair<X509Certificate, KeyPair>? = null,
         expiryYears: Int = 5,
         isCa: Boolean = ca == null,
-        title: String = "Cert"
     ): X509Certificate {
 
         infix fun ASN1ObjectIdentifier.rdn(str: String) = RDN(this, DERUTF8String(str))
@@ -216,8 +206,7 @@ object TLS {
                 BCStyle.C rdn "AQ",  // prepare to be forcibly relocated to antarctica
                 BCStyle.POSTAL_CODE rdn "96598-0001",
                 BCStyle.POSTAL_ADDRESS rdn "PSC 768 Box 400",
-                BCStyle.CN rdn name,
-                BCStyle.T rdn title,
+                BCStyle.CN rdn name
             )
         )
         val serialNum = BigInteger(Random.nextLong().absoluteValue.toString())
@@ -244,7 +233,7 @@ object TLS {
 
         v3Bldr.addExtension(
             Extension.subjectKeyIdentifier,
-            true,
+            false,
             JcaX509ExtensionUtils().createSubjectKeyIdentifier(keyPair.public)
         )
 
@@ -269,7 +258,7 @@ object TLS {
                 X509KeyUsage(X509KeyUsage.cRLSign or X509KeyUsage.keyCertSign or X509KeyUsage.digitalSignature or X509KeyUsage.keyAgreement)
             )
 
-            v3Bldr.addExtension(Extension.basicConstraints, true, BasicConstraints(10))
+            v3Bldr.addExtension(Extension.basicConstraints, false, BasicConstraints(true))
         }
 
 
@@ -297,8 +286,8 @@ fun main() {
     val serverKey = ecKeyPair()
     val serverCert = generateCert("server", serverKey, Pair(intCert, intKey))
 
-    val client = TLS.TLSClient(clientKey.private, clientCert, arrayOf(clientCert), certToKeyStore(caCert))
-    val server = TLS.TLSServer(serverKey.private, serverCert, arrayOf(serverCert, intCert, caCert), certToKeyStore(clientCert))
+    val client = TLS.TLSClient(clientKey.private, clientCert, arrayOf(clientCert), certToKeyStore(caCert, certChain = arrayOf(caCert)))
+    val server = TLS.TLSServer(serverKey.private, serverCert, arrayOf(serverCert, intCert, caCert), certToKeyStore(clientCert, certChain = arrayOf(clientCert)))
 
     runBlocking {
         launch(Dispatchers.IO) {
