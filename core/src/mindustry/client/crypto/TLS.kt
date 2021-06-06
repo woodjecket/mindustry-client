@@ -39,6 +39,8 @@ import kotlin.random.Random
 
 /**
  * An object containing utilities for using TLSv1.3.
+ *
+ * NOTE: Very unfinished, intermediate certificates aren't working and neither is multi-party signing.
  */
 object TLS {
     val random: SecureRandom = SecureRandom.getInstanceStrong()
@@ -203,10 +205,10 @@ object TLS {
 
         val domain = X500Name(
             arrayOf(
-                BCStyle.C rdn "AQ",  // prepare to be forcibly relocated to antarctica
-                BCStyle.POSTAL_CODE rdn "96598-0001",
-                BCStyle.POSTAL_ADDRESS rdn "PSC 768 Box 400",
-                BCStyle.CN rdn name
+//                BCStyle.C rdn "AQ",  // prepare to be forcibly relocated to antarctica  // todo figure out why these break it
+//                BCStyle.POSTAL_CODE rdn "96598-0001",
+//                BCStyle.POSTAL_ADDRESS rdn "PSC 768 Box 400",
+                BCStyle.CN rdn name,
             )
         )
         val serialNum = BigInteger(Random.nextLong().absoluteValue.toString())
