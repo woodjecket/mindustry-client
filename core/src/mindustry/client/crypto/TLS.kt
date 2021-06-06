@@ -93,8 +93,9 @@ object TLS {
 
             val keyStore = certToKeyStore(certificate, certChain, key)
             store = keyStore
+            println(store.getCertificateChain("key").joinToString("\n\n\n===============\n\n\n"))
 
-            val kmf = KeyManagerFactory.getInstance("PKIX", "BCJSSE")
+            val kmf = KeyManagerFactory.getInstance("X509", "BCJSSE")
             kmf.init(keyStore, password)
             context = SSLContext.getInstance("TLSv1.3", "BCJSSE")
             context.init(
@@ -132,7 +133,7 @@ object TLS {
             private set
 
         init {
-            store.store(File("/tmp/stuff.pkcs12").outputStream(), "abc123".toCharArray())
+//            store.store(File("/tmp/stuff.pkcs12").outputStream(), "abc123".toCharArray())
             val sock = SocketFactory.getDefault().createSocket()
             serverSocket = context.serverSocketFactory.createServerSocket(0) as SSLServerSocket
             serverSocket.needClientAuth = true
