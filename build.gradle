@@ -437,6 +437,7 @@ project(":tests"){
         testImplementation "org.junit.jupiter:junit-jupiter-api:5.3.1"
         testImplementation arcModule("backends:backend-headless")
         testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.3.1"
+        implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.0'
     }
 
     test{

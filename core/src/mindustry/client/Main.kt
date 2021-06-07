@@ -16,6 +16,7 @@ import mindustry.entities.units.*
 import mindustry.game.*
 import mindustry.gen.Groups
 import mindustry.input.*
+import java.time.Instant
 
 object Main : ApplicationListener {
     lateinit var communicationSystem: SwitchableCommunicationSystem
@@ -83,11 +84,25 @@ object Main : ApplicationListener {
                 is TLSRequest -> {
                     if (transmission.destination != communicationSystem.id) return@addListener
                     val store = keyStorage ?: return@addListener
-                    val key = store.key(transmission.serialNum) ?: return@addListener
-                    val cert = store.cert(transmission.serialNum) ?: return@addListener
 
-//                    val peer = TLS.TLSClient(key, cert, store.trustStore)
-//                    tlsSessions.add(TLSSession(senderId, peer, TunneledCommunicationSystem(1024, 1f, peer.socket!!.getInputStream(), peer.socket!!.getOutputStream())))
+                    val key = keyStorage?.key() ?: return@addListener
+                    val cert = keyStorage?.cert() ?: return@addListener
+                    val chain = keyStorage?.certChain() ?: return@addListener
+
+                    val peer = TLS.TLSClient(key, cert, chain, store.trustStore)
+
+                    mainScope.launch {
+                        val start = Instant.now()
+                        while (!(peer.ready || start.age() > 30)) {
+                            delay(100L)
+                        }
+                        if (peer.ready) {
+                            tlsSessions.add(TLSSession(
+                                senderId, peer,
+                                TunneledCommunicationSystem(1024, 1f, peer.input, peer.output)
+                            ))
+                        }
+                    }
                 }
             }
         }

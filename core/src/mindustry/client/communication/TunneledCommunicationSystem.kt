@@ -26,12 +26,14 @@ class TunneledCommunicationSystem(override val MAX_LENGTH: Int, override val RAT
                 while (true) {
                     for (item in active) {
                         if (item.isEnqueued || item.get() == null) {
+                            println("removing $item")
                             active.remove(item)
                             continue
                         }
+
                         val gotten = item.get() ?: continue
-                        if (gotten.inp.available() > 4) {
-                            val buf = gotten.inp.readNBytes(gotten.inp.available()).buffer()
+                        if (gotten.inp.available() >= 0) {
+                            val buf = gotten.inp.readBytes().copyOf().apply { println("G: ${contentToString()}") }.buffer()
                             val sender = buf.int
                             val content = buf.remainingBytes()
                             gotten.listeners.forEach { it(content, sender) }
@@ -44,6 +46,8 @@ class TunneledCommunicationSystem(override val MAX_LENGTH: Int, override val RAT
     }
 
     override fun send(bytes: ByteArray) {
+        println("sending ${bytes.size} bytes...")
+        println("S: ${bytes.contentToString()}")
         out.write(id.toBytes() + bytes)
     }
 }

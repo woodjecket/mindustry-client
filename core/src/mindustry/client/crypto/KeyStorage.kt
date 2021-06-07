@@ -6,6 +6,7 @@ import java.io.File
 import java.math.BigInteger
 import java.security.KeyPair
 import java.security.KeyStore
+import java.security.KeyStoreException
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
 
@@ -49,16 +50,25 @@ class KeyStorage(val dataDir: File, name: String) {
 
     /** Trusts a given certificate. */
     fun trust(certificate: X509Certificate) {
+        if (trustStore.containsAlias("cert${certificate.serialNumber}")) return
         trustStore.setCertificateEntry("cert${certificate.serialNumber}", certificate)
     }
 
     fun untrust(certificate: X509Certificate) {
-        trustStore.deleteEntry("cert${certificate.serialNumber}")
+        try {
+            trustStore.deleteEntry("cert${certificate.serialNumber}")
+        } catch (e: KeyStoreException) {}
     }
 
-    fun key(serialNum: BigInteger): PrivateKey? = store.getKey("key$serialNum", password.toCharArray()) as PrivateKey?
+    fun key(): PrivateKey? = store.getKey("key", password.toCharArray()) as? PrivateKey
 
-    fun cert(serialNum: BigInteger): X509Certificate? = store.getCertificate("cert$serialNum") as X509Certificate?
+    fun cert(): X509Certificate? = store.getCertificate("cert") as? X509Certificate
+
+    fun certChain(): Array<X509Certificate>? = store.getCertificateChain("chain").mapNotNull { it as? X509Certificate }.toTypedArray().run { if (this.isEmpty()) null else this }
+
+//    fun key(serialNum: BigInteger): PrivateKey? = store.getKey("key$serialNum", password.toCharArray()) as PrivateKey?
+//
+//    fun cert(serialNum: BigInteger): X509Certificate? = store.getCertificate("cert$serialNum") as X509Certificate?
 
     fun save() {
         store.store(dataDir.resolve(KEY_STORE_FILENAME).outputStream(), password.toCharArray())

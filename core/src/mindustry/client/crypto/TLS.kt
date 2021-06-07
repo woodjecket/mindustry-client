@@ -36,11 +36,10 @@ import javax.net.SocketFactory
 import javax.net.ssl.*
 import kotlin.math.absoluteValue
 import kotlin.random.Random
+import kotlin.random.asJavaRandom
 
 /**
  * An object containing utilities for using TLSv1.3.
- *
- * NOTE: Very unfinished, intermediate certificates aren't working and neither is multi-party signing.
  */
 object TLS {
     val random: SecureRandom = SecureRandom.getInstanceStrong()
@@ -68,14 +67,17 @@ object TLS {
         abstract val ready: Boolean
 
         /** The inner, secured socket. */
-        var socket: Socket? = null
-            protected set
+        protected var socket: Socket? = null
 
         /** The input stream over which TLS will be tunneled. */
         abstract val input: InputStream
 
         /** The input stream over which TLS will be tunneled. */
         abstract val output: OutputStream
+
+        abstract var secureInput: InputStream
+
+        abstract var secureOutput: OutputStream
 
         protected companion object {
             var lastPort = 20_000  // note: this will eventually run out
@@ -96,6 +98,23 @@ object TLS {
                 kmf.keyManagers, tmf.trustManagers,
                 random
             )
+        }
+
+        fun read(): ByteArray? {
+            return try {
+                socket?.getInputStream()?.readBytes()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        }
+
+        fun write(content: ByteArray) {
+            try {
+                socket?.getOutputStream()?.write(content)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -126,6 +145,9 @@ object TLS {
         override lateinit var output: OutputStream
             private set
 
+        override lateinit var secureInput: InputStream
+        override lateinit var secureOutput: OutputStream
+
         init {
             val sock = SocketFactory.getDefault().createSocket()
             serverSocket = context.serverSocketFactory.createServerSocket(0) as SSLServerSocket
@@ -137,6 +159,9 @@ object TLS {
                 sock.connect(InetSocketAddress("127.0.0.1", serverSocket.localPort))
                 input = sock.getInputStream()
                 output = sock.getOutputStream()
+
+                secureInput = socket!!.getInputStream()
+                secureOutput = socket!!.getOutputStream()
             }
         }
 
@@ -160,6 +185,9 @@ object TLS {
         override var ready: Boolean = false
             private set
 
+        override lateinit var secureInput: InputStream
+        override lateinit var secureOutput: OutputStream
+
         init {
             val factory: SocketFactory = context.socketFactory
 
@@ -180,6 +208,9 @@ object TLS {
                 sslParams.endpointIdentificationAlgorithm = "HTTPS"
                 connection.sslParameters = sslParams
                 socket = connection
+
+                secureInput = connection.inputStream
+                secureOutput = connection.outputStream
             }
         }
 
@@ -211,7 +242,7 @@ object TLS {
                 BCStyle.CN rdn name,
             )
         )
-        val serialNum = BigInteger(Random.nextLong().absoluteValue.toString())
+        val serialNum = BigInteger(128, Random.asJavaRandom())
 
         val calendar = Calendar.getInstance()
         calendar.time = Date()
@@ -304,18 +335,17 @@ fun main() {
         }
 
         launch(Dispatchers.IO) {
-            val out = PrintWriter(server.socket!!.getOutputStream(), true)
             while (true) {
-                out.println("difjiofjiowejf")
+                server.write("difjiofjiowejf".encodeToByteArray())
                 delay(1000)
             }
         }
 
         launch(Dispatchers.IO) {
-            val input = BufferedReader(InputStreamReader(client.socket!!.inputStream))
             while (true) {
-                val item = input.readLine() ?: continue
-                println("Got '$item'")
+                val gotten = client.read() ?: continue
+                if (gotten.isEmpty()) continue
+                println("Got '${gotten.decodeToString()}'")
             }
         }
     }
