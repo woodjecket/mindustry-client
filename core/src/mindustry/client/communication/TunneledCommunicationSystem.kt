@@ -7,6 +7,8 @@ import mindustry.client.utils.toBytes
 import java.io.InputStream
 import java.io.OutputStream
 import java.lang.ref.WeakReference
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.random.Random
 
 /** Be careful when using this class!  Make sure that the [inp]'s available() method is exact (i.e. [java.io.ByteArrayInputStream]). */
@@ -15,28 +17,34 @@ class TunneledCommunicationSystem(override val MAX_LENGTH: Int, override val RAT
     override val id = Random.nextInt()
 
     init {
-        active.add(WeakReference(this))
+        lock.withLock {
+            active.add(WeakReference(this))
+        }
     }
 
     private companion object {
+        val lock = ReentrantLock()
         val active = mutableListOf<WeakReference<TunneledCommunicationSystem>>()
 
         init {
-            MainScope().launch(Dispatchers.IO) {
+            CoroutineScope(Dispatchers.Default).launch(Dispatchers.IO) {
                 while (true) {
-                    for (item in active) {
-                        if (item.isEnqueued || item.get() == null) {
-                            println("removing $item")
-                            active.remove(item)
-                            continue
-                        }
+                    lock.withLock {
+                        for (item in active) {
+                            if (item.isEnqueued || item.get() == null) {
+                                println("removing $item")
+                                active.remove(item)
+                                continue
+                            }
 
-                        val gotten = item.get() ?: continue
-                        if (gotten.inp.available() >= 0) {
-                            val buf = gotten.inp.readBytes().copyOf().apply { println("G: ${contentToString()}") }.buffer()
-                            val sender = buf.int
-                            val content = buf.remainingBytes()
-                            gotten.listeners.forEach { it(content, sender) }
+                            val gotten = item.get() ?: continue
+                            val bytes = gotten.inp.readBytes()
+                            if (bytes.size >= 4) {
+                                val buf = bytes.apply { println("G: ${contentToString()}") }.buffer()
+                                val sender = buf.int
+                                val content = buf.remainingBytes()
+                                gotten.listeners.forEach { it(content, sender) }
+                            }
                         }
                     }
                     delay(10)
