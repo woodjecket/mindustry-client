@@ -79,6 +79,22 @@ fun Float.ceil() = ceil(this).toInt()
 
 fun ByteArray.buffer(): ByteBuffer = ByteBuffer.wrap(this)
 
+fun ByteArray.int(offset: Int = 0) =
+    (get(offset + 0).toInt() shl 0)  or
+    (get(offset + 1).toInt() shl 8)  or
+    (get(offset + 2).toInt() shl 16) or
+    (get(offset + 3).toInt() shl 24)
+
+fun ByteArray.long(offset: Int = 0) =
+            (get(offset + 0).toLong() shl 0)  or
+            (get(offset + 1).toLong() shl 8)  or
+            (get(offset + 2).toLong() shl 16) or
+            (get(offset + 3).toLong() shl 24) or
+            (get(offset + 4).toLong() shl 16) or
+            (get(offset + 5).toLong() shl 24) or
+            (get(offset + 6).toLong() shl 32) or
+            (get(offset + 7).toLong() shl 48)
+
 object Compression {
     fun compress(input: ByteArray): ByteArray {
         val deflater = DeflaterInputStream(input.inputStream())
@@ -171,3 +187,7 @@ infix fun <A, B> kotlin.Pair<A, B>.eqFlip(other: kotlin.Pair<A, B>) = this == ot
 
 /** Checks equality between a [kotlin.Pair] and two other values. */
 fun <A, B> kotlin.Pair<A, B>.eqFlip(a: A, b: B) = this.first == a && this.second == b || this.first == b && this.second == a
+
+operator fun ByteArray.get(range: IntRange): ByteArray {
+    return copyOfRange(range.first, range.last)
+}
