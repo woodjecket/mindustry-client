@@ -163,7 +163,7 @@ object Client {
             }
             for (tile in world.tiles) {
                 if (tile?.build == null || tile.build.team != player.team() || tile.block() != Blocks.commandCenter) continue
-                Call.tileConfig(player, tile.build, when (args[0].toLowerCase()[0]) {
+                Call.tileConfig(player, tile.build, when (args[0].lowercase()[0]) {
                     'a' -> UnitCommand.attack
                     'r' -> UnitCommand.rally
                     else -> UnitCommand.idle

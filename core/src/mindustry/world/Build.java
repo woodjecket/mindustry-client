@@ -38,6 +38,8 @@ public class Build{
         int rotation = tile.build != null ? tile.build.rotation : 0;
         Block previous = tile.block();
 
+        Events.fire(new BlockBuildBeginEventBefore(tile, team, unit, true, null));
+
         //instantly deconstruct if necessary
         if(previous.instantDeconstruct){
             ConstructBlock.deconstructFinish(tile, previous, unit);
@@ -49,7 +51,6 @@ public class Build{
         Seq<Building> prevBuild = new Seq<>(1);
         if(tile.build != null) prevBuild.add(tile.build);
 
-        Events.fire(new BlockBuildBeginEventBefore(tile, team, unit, true, null));
 
         tile.setBlock(sub, team, rotation);
         var build = (ConstructBuild)tile.build;
