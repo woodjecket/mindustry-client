@@ -1,9 +1,14 @@
 package mindustry.client.crypto
 
 import kotlinx.coroutines.*
+import mindustry.client.Main
+import mindustry.client.communication.CommunicationSystem
+import mindustry.client.communication.DummyTransmission
+import mindustry.client.communication.Packets
 import mindustry.client.crypto.TLS.certToKeyStore
 import mindustry.client.crypto.TLS.ecKeyPair
 import mindustry.client.crypto.TLS.generateCert
+import mindustry.client.utils.base32678
 import org.bouncycastle.asn1.ASN1ObjectIdentifier
 import org.bouncycastle.asn1.DERUTF8String
 import org.bouncycastle.asn1.x500.RDN
@@ -12,12 +17,9 @@ import org.bouncycastle.asn1.x500.style.BCStyle
 import org.bouncycastle.asn1.x509.*
 import org.bouncycastle.asn1.x509.Extension
 import org.bouncycastle.cert.X509CertificateHolder
-import org.bouncycastle.cert.bc.BcX509ExtensionUtils
-import org.bouncycastle.cert.jcajce.JcaAttributeCertificateIssuer
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
-import org.bouncycastle.est.jcajce.JcaJceUtils
 import org.bouncycastle.jcajce.provider.asymmetric.edec.KeyPairGeneratorSpi
 import org.bouncycastle.jce.X509KeyUsage
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -36,7 +38,6 @@ import javax.net.SocketFactory
 import javax.net.ssl.*
 import kotlin.math.absoluteValue
 import kotlin.random.Random
-import kotlin.random.asJavaRandom
 
 /**
  * An object containing utilities for using TLSv1.3.
@@ -61,13 +62,14 @@ object TLS {
      * Base class for a TLS peer.  Provides an [input] and [output] stream and a secure [socket] (null before
      * connected).
      */
-    abstract class TLSPeer(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore) : Closeable {
+    abstract class TLSPeer(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore, override val id: Int, val otherId: Int) : Closeable, CommunicationSystem() {
         protected val context: SSLContext
 
         abstract val ready: Boolean
 
         /** The inner, secured socket. */
-        protected var socket: Socket? = null
+        var socket: Socket? = null
+            protected set
 
         /** The input stream over which TLS will be tunneled. */
         abstract val input: InputStream
@@ -75,13 +77,15 @@ object TLS {
         /** The input stream over which TLS will be tunneled. */
         abstract val output: OutputStream
 
-        abstract var secureInput: InputStream
+        private lateinit var writer: PrintWriter
 
-        abstract var secureOutput: OutputStream
+        private lateinit var job: Job
 
-        protected companion object {
-            var lastPort = 20_000  // note: this will eventually run out
-        }
+        override val listeners: MutableList<(input: ByteArray, sender: Int) -> Unit> = mutableListOf()
+
+        override val MAX_LENGTH = 2048
+
+        override val RATE: Float = 0f
 
         init {
             val password = "abc123".toCharArray()  // It stays in memory so this is ok
@@ -100,25 +104,32 @@ object TLS {
             )
         }
 
-        fun read(): ByteArray? {
-            return try {
-                socket?.getInputStream()?.readBytes()
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
+        protected fun initializeIO() {
+            // cancer
+            writer = PrintWriter(socket!!.getOutputStream(), true)
+
+            // more cancer
+            job = Main.mainScope.launch(Dispatchers.IO) {
+                val input = BufferedReader(InputStreamReader(socket!!.inputStream))
+                while (true) {
+                    val item = input.readLine().base32678() ?: continue
+                    listeners.forEach { it(item, otherId) }
+                }
             }
         }
 
-        fun write(content: ByteArray) {
-            try {
-                socket?.getOutputStream()?.write(content)
-            } catch (e: Exception) {
-                e.printStackTrace()
+        override fun send(bytes: ByteArray) {
+            if (this::writer.isInitialized) {
+                writer.println(bytes.base32678())  // shut up
             }
+        }
+
+        override fun close() {
+            job.cancel()
         }
     }
 
-    private inline fun <reified T> Any?.reflect(field: String): T? {
+    inline fun <reified T> Any?.reflect(field: String): T? {
         this ?: return null
         return try {
             val f = this::class.java.getDeclaredField(field)
@@ -134,7 +145,7 @@ object TLS {
      *
      *  @see TLSPeer
      */
-    class TLSServer(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore) : TLSPeer(key, certificate, certChain, trusted) {
+    class TLSServer(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore, id: Int, otherId: Int) : TLSPeer(key, certificate, certChain, trusted, id, otherId) {
         private val serverSocket: SSLServerSocket
 
         override val ready: Boolean
@@ -144,9 +155,6 @@ object TLS {
             private set
         override lateinit var output: OutputStream
             private set
-
-        override lateinit var secureInput: InputStream
-        override lateinit var secureOutput: OutputStream
 
         init {
             val sock = SocketFactory.getDefault().createSocket()
@@ -159,13 +167,12 @@ object TLS {
                 sock.connect(InetSocketAddress("127.0.0.1", serverSocket.localPort))
                 input = sock.getInputStream()
                 output = sock.getOutputStream()
-
-                secureInput = socket!!.getInputStream()
-                secureOutput = socket!!.getOutputStream()
             }
+            initializeIO()
         }
 
         override fun close() {
+            super.close()
             socket?.close()
             serverSocket.close()
             socket = null
@@ -177,16 +184,13 @@ object TLS {
      *
      *  @see TLSPeer
      */
-    class TLSClient(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore) : TLSPeer(key, certificate, certChain, trusted) {
+    class TLSClient(key: PrivateKey, certificate: X509Certificate, certChain: Array<X509Certificate>, trusted: KeyStore, id: Int, otherId: Int) : TLSPeer(key, certificate, certChain, trusted, id, otherId) {
         override lateinit var input: InputStream
             private set
         override lateinit var output: OutputStream
             private set
         override var ready: Boolean = false
             private set
-
-        override lateinit var secureInput: InputStream
-        override lateinit var secureOutput: OutputStream
 
         init {
             val factory: SocketFactory = context.socketFactory
@@ -208,13 +212,12 @@ object TLS {
                 sslParams.endpointIdentificationAlgorithm = "HTTPS"
                 connection.sslParameters = sslParams
                 socket = connection
-
-                secureInput = connection.inputStream
-                secureOutput = connection.outputStream
+                initializeIO()
             }
         }
 
         override fun close() {
+            super.close()
             socket?.close()
             socket = null
         }
@@ -242,7 +245,7 @@ object TLS {
                 BCStyle.CN rdn name,
             )
         )
-        val serialNum = BigInteger(128, Random.asJavaRandom())
+        val serialNum = BigInteger(Random.nextLong().absoluteValue.toString())
 
         val calendar = Calendar.getInstance()
         calendar.time = Date()
@@ -319,8 +322,8 @@ fun main() {
     val serverKey = ecKeyPair()
     val serverCert = generateCert("server", serverKey, Pair(intCert, intKey))
 
-    val client = TLS.TLSClient(clientKey.private, clientCert, arrayOf(clientCert), certToKeyStore(caCert, certChain = arrayOf(caCert)))
-    val server = TLS.TLSServer(serverKey.private, serverCert, arrayOf(serverCert, intCert, caCert), certToKeyStore(clientCert, certChain = arrayOf(clientCert)))
+    val client = TLS.TLSClient(clientKey.private, clientCert, arrayOf(clientCert), certToKeyStore(caCert, certChain = arrayOf(caCert)), 1, 2)
+    val server = TLS.TLSServer(serverKey.private, serverCert, arrayOf(serverCert, intCert, caCert), certToKeyStore(clientCert, certChain = arrayOf(clientCert)), 2, 1)
 
     runBlocking {
         launch(Dispatchers.IO) {
@@ -328,24 +331,24 @@ fun main() {
                 val read1 = client.input.readNBytes(client.input.available())
                 val read2 = server.input.readNBytes(server.input.available())
                 if (read1.size + read2.size > 0) println("Up: ${read1.size}B   Down: ${read2.size}B")
-                delay(500)
+                delay(500)  // simulate transmission delay
                 server.output.write(read1)
                 client.output.write(read2)
             }
         }
 
         launch(Dispatchers.IO) {
-            while (true) {
-                server.write("difjiofjiowejf".encodeToByteArray())
-                delay(1000)
-            }
-        }
+            val client1 = Packets.CommunicationClient(server)
+            val client2 = Packets.CommunicationClient(client)
 
-        launch(Dispatchers.IO) {
-            while (true) {
-                val gotten = client.read() ?: continue
-                if (gotten.isEmpty()) continue
-                println("Got '${gotten.decodeToString()}'")
+            client2.addListener { transmission, _ -> println("Got ${(transmission as DummyTransmission).content.contentToString()}") }
+
+            client1.send(DummyTransmission(byteArrayOf(1, 2, 3, 4, 5, 6)))
+
+            for (i in 0..1000) {
+                client1.update()
+                client2.update()
+                delay(10)
             }
         }
     }

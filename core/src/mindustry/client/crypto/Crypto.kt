@@ -7,6 +7,7 @@ import org.bouncycastle.crypto.generators.X25519KeyPairGenerator
 import org.bouncycastle.crypto.params.*
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
 import org.bouncycastle.math.ec.rfc8032.Ed25519
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
@@ -38,7 +39,9 @@ object Crypto : Initializable {
 
     /** Initializes cryptography stuff, must be called before usage. */
     override fun initializeAlways() {
-        Security.addProvider(BouncyCastleProvider())
+        val bouncy = BouncyCastleProvider()
+        Security.addProvider(bouncy)
+        Security.addProvider(BouncyCastleJsseProvider(bouncy))
         signatureEngine = Ed25519Signer()
         aes = Cipher.getInstance("AES/CBC/PKCS5Padding")
     }

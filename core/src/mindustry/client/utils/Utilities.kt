@@ -17,6 +17,7 @@ import java.nio.*
 import java.time.*
 import java.time.temporal.*
 import java.util.zip.*
+import kotlin.experimental.or
 import kotlin.math.*
 
 fun Table.label(text: String): Cell<Label> {
@@ -63,6 +64,8 @@ fun String.base64(): ByteArray? = try { Base64Coder.decode(this) } catch (e: Ill
 
 fun Int.toBytes() = byteArrayOf((this shr 24).toByte(), (this shr 16).toByte(), (this shr 8).toByte(), (this).toByte())
 
+fun Short.toBytes() = byteArrayOf((this.toInt() shr 8).toByte(), toByte())
+
 fun Long.toBytes() = byteArrayOf((this shr 56).toByte(), (this shr 48).toByte(), (this shr 40).toByte(), (this shr 32).toByte(), (this shr 24).toByte(), (this shr 16).toByte(), (this shr 8).toByte(), (this).toByte())
 
 fun ByteArray.base32678(): String = Base32768Coder.encode(this)
@@ -80,20 +83,24 @@ fun Float.ceil() = ceil(this).toInt()
 fun ByteArray.buffer(): ByteBuffer = ByteBuffer.wrap(this)
 
 fun ByteArray.int(offset: Int = 0) =
-    (get(offset + 0).toInt() shl 0)  or
-    (get(offset + 1).toInt() shl 8)  or
-    (get(offset + 2).toInt() shl 16) or
-    (get(offset + 3).toInt() shl 24)
+    (get(offset + 3).toInt() shl 0)  or
+    (get(offset + 2).toInt() shl 8)  or
+    (get(offset + 1).toInt() shl 16) or
+    (get(offset + 0).toInt() shl 24)
+
+fun ByteArray.short(offset: Int = 0) =
+    (get(offset + 1).toInt() shl 0).toShort() or
+    (get(offset + 0).toInt() shl 8).toShort()
 
 fun ByteArray.long(offset: Int = 0) =
-            (get(offset + 0).toLong() shl 0)  or
-            (get(offset + 1).toLong() shl 8)  or
-            (get(offset + 2).toLong() shl 16) or
-            (get(offset + 3).toLong() shl 24) or
-            (get(offset + 4).toLong() shl 16) or
-            (get(offset + 5).toLong() shl 24) or
-            (get(offset + 6).toLong() shl 32) or
-            (get(offset + 7).toLong() shl 48)
+            (get(offset + 7).toLong() shl 0)  or
+            (get(offset + 6).toLong() shl 8)  or
+            (get(offset + 5).toLong() shl 16) or
+            (get(offset + 4).toLong() shl 24) or
+            (get(offset + 3).toLong() shl 16) or
+            (get(offset + 2).toLong() shl 24) or
+            (get(offset + 1).toLong() shl 32) or
+            (get(offset + 0).toLong() shl 48)
 
 object Compression {
     fun compress(input: ByteArray): ByteArray {

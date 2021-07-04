@@ -198,8 +198,8 @@ public class MenuFragment extends Fragment{
                     }),
                     new Buttoni("@client.changelog", Icon.edit, ChangelogDialog.INSTANCE::show),
                     new Buttoni("@client.features", Icon.list, FeaturesDialog.INSTANCE::show),
-                    new Buttoni("@client.makekey", Icon.lock, () -> Vars.ui.showConfirm("Key Overwrite", "This will irreversibly overwrite your key.  Are you sure you want to do this?", () -> new KeyShareDialog(Main.messageCrypto).show())),
-                    new Buttoni("@client.keyshare", Icon.lock, () -> new KeyShareDialog(Main.messageCrypto).show())
+                    new Buttoni("@client.makekey", Icon.lock, () -> Vars.ui.showConfirm("Key Overwrite", "This will irreversibly overwrite your key.  Are you sure you want to do this?", () -> new TLSKeyDialog().show())),
+                    new Buttoni("@client.keyshare", Icon.lock, () -> new TLSKeyDialog().show())
                 ), // End of client section
                 new Buttoni("@editor", Icon.terrain, () -> checkPlay(ui.maps::show)), steam ? new Buttoni("@workshop", Icon.steam, platform::openWorkshop) : null,
                 new Buttoni("@mods", Icon.book, ui.mods::show),

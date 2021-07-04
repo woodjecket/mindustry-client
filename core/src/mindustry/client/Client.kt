@@ -290,6 +290,10 @@ object Client {
                 player.sendMessage(Core.bundle.format("client.command.fixpower.confirm", n, PowerGraph.activeGraphs.size))
             }
         }
+
+        register("connect <id>") { args: Array<String>, _: Player ->
+            Main.connectTLS(args[0].toIntOrNull() ?: return@register)
+        }
     }
 
     /** Registers a command.

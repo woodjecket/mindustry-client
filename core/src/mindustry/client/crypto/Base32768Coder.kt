@@ -1,10 +1,8 @@
 package mindustry.client.crypto
 
 import mindustry.client.crypto.Base32768Coder.BITS
-import mindustry.client.utils.ceil
-import mindustry.client.utils.floor
+import mindustry.client.utils.*
 import java.io.IOException
-import java.math.BigInteger
 
 /** You've heard of base64, now get ready for... base32768.  Encodes 15 bits of data into each unicode character,
  * which so far has not caused any problems.  If it turns out to break stuff, the [BITS] constant can be changed
@@ -14,44 +12,45 @@ import java.math.BigInteger
 object Base32768Coder {
     private const val BITS = 15
 
-    fun availableBytes(length: Int) = ((length.toDouble() * BITS) / 8).floor()
+    fun availableBytes(length: Int) = ((length * BITS) / 8.0).floor()
 
-    fun encodedLengthOf(bytes: Int) = ((bytes.toDouble() * 8) / BITS).ceil()
+    fun encodedLengthOf(bytes: Int) = ((bytes * 8.0) / BITS).ceil()
 
     fun encode(input: ByteArray): String {
-        var inp = BigInteger(byteArrayOf(1).plus(input))
-        val out = mutableListOf<Int>()
-        val andValue = 2.toBigInteger().pow(BITS) - 1.toBigInteger()
-        while (inp != BigInteger.ZERO) {
-            out.add((inp and andValue).toInt() + 128)
-            inp = inp shr BITS
+        // Create output array
+        val out = CharArray(encodedLengthOf(input.size))
+        // Create bit stream from input
+        val buffer = RandomAccessInputStream(input.plus(listOf(0, 0)))
+
+        for (index in out.indices) {
+            // Get [BITS] bits out of the stream and add 128 to avoid ASCII control chars
+            out[index] = buffer.readBits(BITS).toChar() + 128
         }
-        return String(out.toIntArray(), 0, out.size) + String(intArrayOf(input.size + 128), 0, 1)
+
+        // Include encoded length as 4 chars each representing 1 byte
+        val lengthEncoded = String(input.size.toBytes().map { it.toInt().toChar() + 128 }.toCharArray())
+        return lengthEncoded + out.concatToString()
     }
 
     @Throws(IOException::class)
     fun decode(input: String): ByteArray {
+        if (input.length < 4) throw IOException("String does not have length prefix!")
         try {
-            val length = input.codePointAt(input.length - 1) - 128
-            var out = BigInteger("0")
+            // Extract length
+            val size = input.slice(0 until 4).toCharArray().map { (it - 128).code.toByte() }.toByteArray().int()
+            // Create output
+            val array = ByteArray(size)
+            // Create bit stream leading to output array
+            val buffer = RandomAccessOutputStream(array)
 
-            for ((index, s) in input.dropLast(1).chunked(1).withIndex()) {
-                out += (s.codePointAt(0) - 128).toBigInteger() shl (index * BITS)
+            for (c in input.drop(4)) {
+                // Take each char, reverse the transform, and add it to the bit stream
+                buffer.writeBits((c.code - 128), BITS)
             }
-            val outp = out.toByteArray().plus(0)
-            return outp.sliceArray(1..length)
+
+            return array
         } catch (e: Exception) {
             throw IOException(e)
         }
-    }
-
-    fun encode(string: String): String {
-        return encode(string.toByteArray(Charsets.UTF_8))
-    }
-
-    @Throws(IOException::class)
-    fun decodeString(input: String): String {
-        val decoded = decode(input)
-        return String(decoded, Charsets.UTF_8)
     }
 }

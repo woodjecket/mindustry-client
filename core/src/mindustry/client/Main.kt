@@ -25,7 +25,7 @@ object Main : ApplicationListener {
     private var dispatchedBuildPlans = mutableListOf<BuildPlan>()
     private val buildPlanInterval = Interval()
     val tlsSessions = mutableListOf<TLSSession>()
-    val mainScope = MainScope()
+    val mainScope = CoroutineScope(Dispatchers.Default)
     var keyStorage: KeyStorage? = null
 
     data class TLSSession(val player: Int, val peer: TLS.TLSPeer, var tunneled: TunneledCommunicationSystem?) {
@@ -41,8 +41,14 @@ object Main : ApplicationListener {
 
             TileRecords.initialize()
 
-            val setting = Core.settings.getString("certificateName", null)
-            if (setting != null) keyStorage = KeyStorage(Core.settings.dataDirectory.file(), setting)
+            Core.app.post {
+                println("A")
+                val setting = Core.settings.getString("name", null)
+                println(setting)
+                if (setting != null) {
+                    keyStorage = KeyStorage(Core.settings.dataDirectory.file(), setting)
+                }
+            }
         } else {
             communicationSystem = SwitchableCommunicationSystem(DummyCommunicationSystem(mutableListOf()))
             communicationSystem.init()
@@ -83,26 +89,38 @@ object Main : ApplicationListener {
                 }
                 is TLSRequest -> {
                     if (transmission.destination != communicationSystem.id) return@addListener
+                    println("TLS request from $senderId...")
                     val store = keyStorage ?: return@addListener
 
                     val key = keyStorage?.key() ?: return@addListener
                     val cert = keyStorage?.cert() ?: return@addListener
                     val chain = keyStorage?.certChain() ?: return@addListener
 
-                    val peer = TLS.TLSClient(key, cert, chain, store.trustStore)
+                    println("Creating peer...")
+                    val peer = TLS.TLSClient(key, cert, chain, store.trustStore, TODO(), TODO())
 
                     mainScope.launch {
                         val start = Instant.now()
-                        while (!(peer.ready || start.age() > 30)) {
-                            delay(100L)
+                        println("Creating session...")
+                        val session = TLSSession(senderId, peer, null)
+                        tlsSessions.add(session)
+                        println("Waiting for handshake...")
+                        while (!peer.ready && start.age() in 0..30) {
+                            delay(100)
                         }
-                        if (peer.ready) {
-                            tlsSessions.add(TLSSession(
-                                senderId, peer,
-                                TunneledCommunicationSystem(1024, 1f, peer.input, peer.output)
-                            ))
+                        if (start.age() >= 30) {
+                            tlsSessions.remove(session)
+                            return@launch
                         }
+                        println("Secure connection established")
+                        session.tunneled = TunneledCommunicationSystem(communicationSystem.RATE, peer.input, peer.output, communicationSystem.id, senderId)
                     }
+                }
+                is TLSTransmission -> {
+                    if (transmission.destination != communicationSystem.id) return@addListener
+                    val session = tlsSessions.find { it.player == senderId } ?: return@addListener
+                    session.peer.output.write(transmission.content)
+                    println("Got TLS transmission from $senderId")
                 }
             }
         }
@@ -112,6 +130,20 @@ object Main : ApplicationListener {
             while (true) {
                 tlsSessions.removeIf { it.stale }
                 delay(1000)
+            }
+        }
+
+        // Flush
+        mainScope.launch(Dispatchers.IO) {
+            while (true) {
+                for (session in tlsSessions) {
+//                    val bytes = ByteArray(session.peer.bufferedInput.available())
+//                    session.peer.bufferedInput.read(bytes)
+//                    if (bytes.isEmpty()) continue
+//                    println("Flushing ${bytes.size} bytes...")
+//                    communicationClient.send(TLSTransmission(session.player, bytes))
+                }
+                delay(100)
             }
         }
     }
@@ -169,6 +201,40 @@ object Main : ApplicationListener {
         if (toSend.isEmpty()) return
         communicationClient.send(BuildQueueTransmission(toSend), { Toast(3f).add(Core.bundle.format("client.sentplans", toSend.size)) }, { Toast(3f).add("@client.nomessageblock")})
         dispatchedBuildPlans.addAll(toSend)
+    }
+
+    fun connectTLS(player: Int) {
+        println("Initiating handshake with $player...")
+
+        val store = keyStorage ?: return
+
+        val key = keyStorage?.key() ?: return
+        val cert = keyStorage?.cert() ?: return
+        val chain = keyStorage?.certChain() ?: return
+
+        println("Creating server...")
+        val peer = TLS.TLSServer(key, cert, chain, store.trustStore, TODO(), TODO())
+
+        mainScope.launch {
+            val start = Instant.now()
+            println("Creating session...")
+            val session = TLSSession(player, peer, null)
+            println("Session created, adding to list")
+            tlsSessions.add(session)
+            println("Sending request")
+            communicationClient.send(TLSRequest(player, cert.serialNumber))  //todo remove serial number it's useless
+            while (!peer.ready && start.age() in 0..30) {
+                delay(100)
+            }
+            println("Ready maybe?")
+            if (start.age() >= 30) {
+                tlsSessions.remove(session)
+                println("Nope just timeout :(")
+                return@launch
+            }
+            println("Secure connection established")
+            session.tunneled = TunneledCommunicationSystem(communicationSystem.RATE, peer.input, peer.output, communicationSystem.id, player)
+        }
     }
 
     /** Run when the object is disposed. */
