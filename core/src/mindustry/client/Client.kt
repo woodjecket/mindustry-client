@@ -294,6 +294,13 @@ object Client {
         register("connect <id>") { args: Array<String>, _: Player ->
             Main.connectTLS(args[0].toIntOrNull() ?: return@register)
         }
+
+        register("encrypted <id> [message...]") { args: Array<String>, player: Player ->
+            val id = args[0].toIntOrNull() ?: return@register
+            val session = Main.tlsSessions.find { it.player == id } ?: return@register
+            session.commsClient.send(MessageTransmission(args[1]))
+            ui.chatfrag.addMessage(args[1], "${player.name} [coral]to [white]${Groups.player.getByID(id).name}", Color.green.cpy().mul(0.25f))
+        }
     }
 
     /** Registers a command.

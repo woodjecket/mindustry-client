@@ -23,6 +23,8 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.jcajce.provider.asymmetric.edec.KeyPairGeneratorSpi
 import org.bouncycastle.jce.X509KeyUsage
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.jsse.BCSSLConnection
+import org.bouncycastle.jsse.BCSSLSocket
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.bouncycastle.tls.TlsProtocol
@@ -30,12 +32,14 @@ import java.io.*
 import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketException
 import java.security.*
 import java.security.cert.*
 import java.util.*
 import javax.net.ServerSocketFactory
 import javax.net.SocketFactory
 import javax.net.ssl.*
+import javax.security.auth.x500.X500Principal
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 
@@ -112,8 +116,12 @@ object TLS {
             job = Main.mainScope.launch(Dispatchers.IO) {
                 val input = BufferedReader(InputStreamReader(socket!!.inputStream))
                 while (true) {
-                    val item = input.readLine().base32678() ?: continue
-                    listeners.forEach { it(item, otherId) }
+                    try {
+                        val item = input.readLine().base32678() ?: continue
+                        listeners.forEach { it(item, otherId) }
+                    } catch (e: SocketException) {  // socket closed
+                        break
+                    }
                 }
             }
         }
@@ -126,6 +134,12 @@ object TLS {
 
         override fun close() {
             job.cancel()
+        }
+
+        fun peerPrincipal(): X500Principal? {
+            // this is disgusting
+//            return socket?.reflect<BCSSLConnection>("connection").apply { println("socket = $this") }?.reflect<Any>("session").apply { println("session = $this") }?.reflectInvoke<org.bouncycastle.tls.Certificate>("getPeerCertificateTLS").apply { println("peer cert = $this\nentries=${this?.certificateEntryList?.contentToString()}\n${this?.certificateEntryList?.joinToString { it.extensions.toList().joinToString { "${it.first}: ${it.second}" } }}") }
+            return (socket as? BCSSLSocket)?.connection?.session?.peerPrincipal as? X500Principal
         }
     }
 
@@ -140,6 +154,19 @@ object TLS {
         }
     }
 
+    data class Arg<T>(val cls: Class<T>, val value: T?)
+
+    inline fun <reified T> Any?.reflectInvoke(function: String, vararg args: Arg<Any>): T? {
+        this ?: return null
+        return try {
+            val f = this::class.java.getDeclaredMethod(function, *args.map { it.cls }.toTypedArray())
+            f.isAccessible = true
+            f.invoke(this, *args.map { it.value }.toTypedArray()) as? T
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /**
      *  A TLS server.
      *
@@ -149,7 +176,7 @@ object TLS {
         private val serverSocket: SSLServerSocket
 
         override val ready: Boolean
-            get() = socket != null && socket?.isConnected == true && socket?.isClosed == false && socket.reflect<TlsProtocol>("protocol")?.isHandshaking == false
+            get() = socket != null && socket?.isConnected == true && socket?.isClosed == false
 
         override lateinit var input: InputStream
             private set

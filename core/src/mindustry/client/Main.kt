@@ -1,6 +1,7 @@
 package mindustry.client
 
 import arc.*
+import arc.graphics.Color
 import arc.math.geom.*
 import arc.struct.*
 import arc.util.Interval
@@ -16,6 +17,8 @@ import mindustry.entities.units.*
 import mindustry.game.*
 import mindustry.gen.Groups
 import mindustry.input.*
+import org.bouncycastle.asn1.x500.style.BCStyle
+import org.bouncycastle.cert.jcajce.JcaX500NameUtil
 import java.time.Instant
 
 object Main : ApplicationListener {
@@ -28,8 +31,9 @@ object Main : ApplicationListener {
     val mainScope = CoroutineScope(Dispatchers.Default)
     var keyStorage: KeyStorage? = null
 
-    data class TLSSession(val player: Int, val peer: TLS.TLSPeer, var tunneled: TunneledCommunicationSystem?) {
+    data class TLSSession(val player: Int, val peer: TLS.TLSPeer) {
         val stale get() = Groups.player?.getByID(player) == null
+        val commsClient = Packets.CommunicationClient(peer)
     }
 
     /** Run on client load. */
@@ -42,9 +46,7 @@ object Main : ApplicationListener {
             TileRecords.initialize()
 
             Core.app.post {
-                println("A")
                 val setting = Core.settings.getString("name", null)
-                println(setting)
                 if (setting != null) {
                     keyStorage = KeyStorage(Core.settings.dataDirectory.file(), setting)
                 }
@@ -97,12 +99,13 @@ object Main : ApplicationListener {
                     val chain = keyStorage?.certChain() ?: return@addListener
 
                     println("Creating peer...")
-                    val peer = TLS.TLSClient(key, cert, chain, store.trustStore, TODO(), TODO())
+                    val peer = TLS.TLSClient(key, cert, chain, store.trustStore, communicationSystem.id, senderId)
 
                     mainScope.launch {
                         val start = Instant.now()
                         println("Creating session...")
-                        val session = TLSSession(senderId, peer, null)
+                        val session = TLSSession(senderId, peer)
+                        tlsListeners(session)
                         tlsSessions.add(session)
                         println("Waiting for handshake...")
                         while (!peer.ready && start.age() in 0..30) {
@@ -113,7 +116,6 @@ object Main : ApplicationListener {
                             return@launch
                         }
                         println("Secure connection established")
-                        session.tunneled = TunneledCommunicationSystem(communicationSystem.RATE, peer.input, peer.output, communicationSystem.id, senderId)
                     }
                 }
                 is TLSTransmission -> {
@@ -128,7 +130,7 @@ object Main : ApplicationListener {
         // Periodically clear out tlsSessions
         mainScope.launch {
             while (true) {
-                tlsSessions.removeIf { it.stale }
+                tlsSessions.filter { it.stale }.forEach { it.peer.close(); tlsSessions.remove(it) }
                 delay(1000)
             }
         }
@@ -137,13 +139,14 @@ object Main : ApplicationListener {
         mainScope.launch(Dispatchers.IO) {
             while (true) {
                 for (session in tlsSessions) {
-//                    val bytes = ByteArray(session.peer.bufferedInput.available())
-//                    session.peer.bufferedInput.read(bytes)
-//                    if (bytes.isEmpty()) continue
-//                    println("Flushing ${bytes.size} bytes...")
-//                    communicationClient.send(TLSTransmission(session.player, bytes))
+                    session.commsClient.update()
+                    val bytes = ByteArray(session.peer.input.available())
+                    session.peer.input.read(bytes)
+                    if (bytes.isEmpty()) continue
+                    println("Flushing ${bytes.size} bytes...")
+                    communicationClient.send(TLSTransmission(session.player, bytes))
                 }
-                delay(100)
+                delay(500)
             }
         }
     }
@@ -213,12 +216,13 @@ object Main : ApplicationListener {
         val chain = keyStorage?.certChain() ?: return
 
         println("Creating server...")
-        val peer = TLS.TLSServer(key, cert, chain, store.trustStore, TODO(), TODO())
+        val peer = TLS.TLSServer(key, cert, chain, store.trustStore, communicationSystem.id, player)
 
         mainScope.launch {
             val start = Instant.now()
             println("Creating session...")
-            val session = TLSSession(player, peer, null)
+            val session = TLSSession(player, peer)
+            tlsListeners(session)
             println("Session created, adding to list")
             tlsSessions.add(session)
             println("Sending request")
@@ -233,7 +237,17 @@ object Main : ApplicationListener {
                 return@launch
             }
             println("Secure connection established")
-            session.tunneled = TunneledCommunicationSystem(communicationSystem.RATE, peer.input, peer.output, communicationSystem.id, player)
+        }
+    }
+
+    fun tlsListeners(session: TLSSession) {
+        session.commsClient.addListener { transmission, _ ->
+            when (transmission) {
+                is MessageTransmission -> {
+                    val name = JcaX500NameUtil.getX500Name(session.peer.peerPrincipal()).getRDNs(BCStyle.CN).firstOrNull()?.first?.value
+                    Vars.ui.chatfrag.addMessage(transmission.content, "$name [coral]to [white]${Vars.player.name}", Color.green.cpy().mul(0.25f))
+                }
+            }
         }
     }
 

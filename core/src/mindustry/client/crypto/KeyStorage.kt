@@ -57,11 +57,13 @@ class KeyStorage(val dataDir: File, name: String) {
     fun trust(certificate: X509Certificate) {
         if (trustStore.containsAlias("cert${certificate.serialNumber}")) return
         trustStore.setCertificateEntry("cert${certificate.serialNumber}", certificate)
+        save()
     }
 
     fun untrust(certificate: X509Certificate) {
         try {
             trustStore.deleteEntry("cert${certificate.serialNumber}")
+            save()
         } catch (e: KeyStoreException) {}
     }
 
