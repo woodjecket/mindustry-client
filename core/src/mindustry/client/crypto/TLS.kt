@@ -130,7 +130,7 @@ object TLS {
 
         override fun send(bytes: ByteArray) {
             if (this::writer.isInitialized) {
-                writer.println(bytes.base32678())  // shut up
+                writer.print(bytes.base32678() + "\n")  // shut up
             }
         }
 
