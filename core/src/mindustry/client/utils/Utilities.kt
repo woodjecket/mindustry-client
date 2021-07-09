@@ -87,25 +87,26 @@ fun Float.ceil() = ceil(this).toInt()
 
 fun ByteArray.buffer(): ByteBuffer = ByteBuffer.wrap(this)
 
+@JvmName("decodeToInt")
 fun ByteArray.int(offset: Int = 0) =
-    (get(offset + 3).toInt() shl 0)  or
-    (get(offset + 2).toInt() shl 8)  or
-    (get(offset + 1).toInt() shl 16) or
-    (get(offset + 0).toInt() shl 24)
+    ((get(offset + 3).toInt() and 0xFF) shl 0)  or
+    ((get(offset + 2).toInt() and 0xFF) shl 8)  or
+    ((get(offset + 1).toInt() and 0xFF) shl 16) or
+    ((get(offset + 0).toInt() and 0xFF) shl 24)
 
 fun ByteArray.short(offset: Int = 0) =
-    (get(offset + 1).toInt() shl 0).toShort() or
-    (get(offset + 0).toInt() shl 8).toShort()
+    ((get(offset + 1).toInt() and 0xFF) shl 0).toShort() or
+    ((get(offset + 0).toInt() and 0xFF) shl 8).toShort()
 
 fun ByteArray.long(offset: Int = 0) =
-            (get(offset + 7).toLong() shl 0)  or
-            (get(offset + 6).toLong() shl 8)  or
-            (get(offset + 5).toLong() shl 16) or
-            (get(offset + 4).toLong() shl 24) or
-            (get(offset + 3).toLong() shl 16) or
-            (get(offset + 2).toLong() shl 24) or
-            (get(offset + 1).toLong() shl 32) or
-            (get(offset + 0).toLong() shl 48)
+            ((get(offset + 7).toLong() and 0xFF) shl 0)  or
+            ((get(offset + 6).toLong() and 0xFF) shl 8)  or
+            ((get(offset + 5).toLong() and 0xFF) shl 16) or
+            ((get(offset + 4).toLong() and 0xFF) shl 24) or
+            ((get(offset + 3).toLong() and 0xFF) shl 16) or
+            ((get(offset + 2).toLong() and 0xFF) shl 24) or
+            ((get(offset + 1).toLong() and 0xFF) shl 32) or
+            ((get(offset + 0).toLong() and 0xFF) shl 48)
 
 object Compression {
     fun compress(input: ByteArray): ByteArray {
