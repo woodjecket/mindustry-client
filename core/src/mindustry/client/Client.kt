@@ -36,7 +36,7 @@ object Client {
     fun update() {
         Navigation.update()
         PowerInfo.update()
-        Spectate.update() // FIXME: Why is spectate its own class? Move it here, no method is needed just add an `if` like below
+        Spectate.update() // FINISHME: Why is spectate its own class? Move it here, no method is needed just add an `if` like below
         if (!configs.isEmpty) {
             try {
                 if (configRateLimit.allow(Administration.Config.interactRateWindow.num() * 1000L, Administration.Config.interactRateLimit.num())) {
@@ -81,11 +81,11 @@ object Client {
 
         register("count <unit-type>", Core.bundle.get("client.command.count.description")) { args, player ->
             val unit = content.units().copy().sort { b -> BiasedLevenshtein.biasedLevenshteinInsensitive(args[0], b.localizedName) }.first()
-            // TODO: Make this check each unit to see if it is a player/formation unit, display that info
+            // FINISHME: Make this check each unit to see if it is a player/formation unit, display that info
             player.sendMessage(Strings.format("[accent]@: @/@", unit.localizedName, player.team().data().countType(unit), Units.getCap(player.team())))
         }
 
-        // FIXME: Add spawn command
+        // FINISHME: Add spawn command
 
         register("go [x] [y]", Core.bundle.get("client.command.go.description")) { args, player ->
             try {
@@ -125,11 +125,11 @@ object Client {
 
         register("builder [options...]", Core.bundle.get("client.command.builder.description")) { args, _: Player ->
             Navigation.follow(BuildPath(if (args.isEmpty()) "" else args[0]))
-        } // TODO: This is so scuffed lol
+        } // FINISHME: This is so scuffed lol
 
         register("miner [options...]", Core.bundle.get("client.command.miner.description")) { args, _: Player ->
             Navigation.follow(MinePath(if (args.isEmpty()) "" else args[0]))
-        } // TODO: This is so scuffed lol
+        } // FINISHME: This is so scuffed lol
 
         register(" [message...]", Core.bundle.get("client.command.!.description")) { args, _ ->
             Call.sendChatMessage("!" + if (args.size == 1) args[0] else "")
@@ -163,10 +163,10 @@ object Client {
 
         register("cc [setting]", Core.bundle.get("client.command.cc.description")) { args, player ->
             if (args.size != 1 || !args[0].matches("(?i)^[ari].*".toRegex())) {
-                player.sendMessage(Core.bundle.get("client.command.cc.invalid"))
+                player.sendMessage("${Core.bundle.get("client.command.cc.invalid")} It is currently set to: ${player.team().data().command.localized()}") // FINISHME: Localize
                 return@register
             }
-            for (tile in world.tiles) {
+            for (tile in world.tiles) { // FINISHME: Use block indexer to find block (use finddialog for reference)
                 if (tile?.build == null || tile.build.team != player.team() || tile.block() != Blocks.commandCenter) continue
                 Call.tileConfig(player, tile.build, when (args[0].lowercase()[0]) {
                     'a' -> UnitCommand.attack
@@ -177,14 +177,6 @@ object Client {
                 return@register
             }
             player.sendMessage(Core.bundle.get("client.command.cc.notfound"))
-        }
-
-        register("poli", "Spelling is hard. This will make sure you never forget how to spell the plural of poly, you're welcome.") { _, _ ->
-            Call.sendChatMessage("Unlike a roly-poly whose plural is roly-polies, the plural form of poly is polys. Please remember this, thanks! :)")
-        }
-
-        register("silicone", "Spelling is hard. This will make sure you never forget how to spell silicon, you're welcome.") { _, _ ->
-            Call.sendChatMessage("\"In short, silicon is a naturally occurring chemical element, whereas silicone is a synthetic substance.\" They are not the same, please get it right!")
         }
 
         register("togglesign", Core.bundle.get("client.command.togglesign.description")) { _, player ->
@@ -249,6 +241,14 @@ object Client {
                     "${store.cert()?.readableName} [coral]to [white]${cert.readableName}",  //todo bundle
                     Color.green.cpy().mul(0.35f)
                 )
+            }
+        }
+
+        register("distance [distance]", "Sets the assist distance multiplier distance (default is 1.5)") { args, player ->
+            if (args.size != 1) player.sendMessage("[accent]The distance multiplier is ${Core.settings.getFloat("assistdistance", 1.5f)} (default is 1.5)")
+            else {
+                Core.settings.put("assistdistance", abs(Strings.parseFloat(args[0], 1.5f)))
+                player.sendMessage("[accent]The distance multiplier is now ${Core.settings.getFloat("assistdistance")} (default is 1.5)")
             }
         }
     }

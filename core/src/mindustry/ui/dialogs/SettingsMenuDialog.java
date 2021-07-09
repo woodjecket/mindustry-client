@@ -7,8 +7,6 @@ import arc.graphics.*;
 import arc.graphics.Texture.*;
 import arc.input.*;
 import arc.math.*;
-import arc.scene.*;
-import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.*;
 import arc.scene.ui.layout.*;
@@ -28,7 +26,6 @@ import mindustry.input.*;
 import mindustry.ui.*;
 
 import java.io.*;
-import java.lang.reflect.*;
 import java.util.zip.*;
 
 import static arc.Core.*;
@@ -345,8 +342,12 @@ public class SettingsMenuDialog extends Dialog{
 
         client.category("misc");
         client.updatePref();
+        client.sliderPref("minepathcap", 1000, 0, 5000, 100, s -> s == 0 ? "Unlimited" : String.valueOf(s));
+        client.sliderPref("defaultbuildpathradius", 0, 0, 250, 5, s -> s == 0 ? "Unlimited" : String.valueOf(s));
         client.checkPref("autoupdate", true);
         client.checkPref("discordrpc", true, i -> platform.toggleDiscord(i));
+        client.checkPref("nyduspadpatch", true);
+        client.checkPref("hidebannedblocks", false);
         client.checkPref("allowjoinany", false);
         client.checkPref("debug", false, i -> Log.level = i ? Log.LogLevel.debug : Log.LogLevel.info); // Sets the log level to debug
         if (steam) client.checkPref("unlockallachievements", false);
@@ -542,7 +543,7 @@ public class SettingsMenuDialog extends Dialog{
 
         /** Since the update pref takes half a page and implementing all this in a non static manner is a pain, I'm leaving it here for now. */
         private void updatePref(){
-            settings.defaults("updateurl", "blahblahbloopster/mindustry-client-v6");
+            settings.defaults("updateurl", "mindustry-antigrief/mindustry-client");
             if (!Version.updateUrl.isEmpty()) settings.put("updateurl", Version.updateUrl); // overwrites updateurl on every boot, shouldn't be a real issue
             pref(new Setting() {
                 boolean urlChanged;

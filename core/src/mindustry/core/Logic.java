@@ -4,9 +4,7 @@ import arc.*;
 import arc.math.*;
 import arc.util.*;
 import mindustry.annotations.Annotations.*;
-import mindustry.client.Client;
 import mindustry.core.GameState.*;
-import mindustry.client.navigation.Navigation;
 import mindustry.ctype.*;
 import mindustry.game.EventType.*;
 import mindustry.game.*;
@@ -56,20 +54,6 @@ public class Logic implements ApplicationListener{
                 }
             }
         });
-
-//        Events.on(BlockBuildBeginEvent.class, event -> { TODO: Add a setting to toggle between the event above and this one
-//            if(!event.breaking){
-//                TeamData data = state.teams.get(event.team);
-//                Iterator<BlockPlan> it = data.blocks.iterator();
-//                while(it.hasNext()){
-//                    BlockPlan b = it.next();
-//                    Block block = content.block(b.block);
-//                    if(event.tile.block().bounds(event.tile.x, event.tile.y, Tmp.r1).overlaps(block.bounds(b.x, b.y, Tmp.r2))){
-//                        it.remove();
-//                    }
-//                }
-//            }
-//        });
 
         //when loading a 'damaged' sector, propagate the damage
         Events.on(SaveLoadEvent.class, e -> {
@@ -263,11 +247,11 @@ public class Logic implements ApplicationListener{
                 Events.fire(new GameOverEvent(state.rules.waveTeam));
             }else if(state.rules.attackMode){
                 //count # of teams alive
-                int countAlive = state.teams.getActive().count(TeamData::hasCore);
+                int countAlive = state.teams.getActive().count(t -> t.hasCore() && t.team != Team.derelict);
 
                 if((countAlive <= 1 || (!state.rules.pvp && state.rules.defaultTeam.core() == null)) && !state.gameOver){
                     //find team that won
-                    TeamData left = state.teams.getActive().find(TeamData::hasCore);
+                    TeamData left = state.teams.getActive().find(t -> t.hasCore() && t.team != Team.derelict);
                     Events.fire(new GameOverEvent(left == null ? Team.derelict : left.team));
                     state.gameOver = true;
                 }

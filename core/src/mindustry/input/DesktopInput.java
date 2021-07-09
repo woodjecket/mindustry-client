@@ -576,7 +576,7 @@ public class DesktopInput extends InputHandler{
         table.button(Icon.map, Styles.clearPartiali, () -> {
             if (state.isCampaign() && !Vars.net.client()) ui.planet.show();
             else MarkerDialog.INSTANCE.show();
-        }).tooltip(state.isCampaign() ? "@planetmap" : "Map Markers"); // FIXME: Doesn't update
+        }).tooltip(state.isCampaign() ? "@planetmap" : "Map Markers"); // FINISHME: Doesn't update
 
         table.button(Icon.tree, Styles.clearPartiali, () -> {
             ui.research.show();
@@ -867,11 +867,10 @@ public class DesktopInput extends InputHandler{
             unit.aim(unit.type.faceTarget ? Core.input.mouseWorld() : Tmp.v1.trns(unit.rotation, Core.input.mouseWorld().dst(unit)).add(unit.x, unit.y));
 
             // if autoboost, invert the behavior of the boost key
-            player.boosting = (Core.settings.getBool("autoboost") != input.keyDown(Binding.boost)) && !movement.isZero();
+            player.boosting = (Core.settings.getBool("autoboost") != input.keyDown(Binding.boost));
         }
         unit.controlWeapons(true, player.shooting && !boosted);
 
-        player.boosting = Core.input.keyDown(Binding.boost);
         player.mouseX = unit.aimX();
         player.mouseY = unit.aimY();
 

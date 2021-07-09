@@ -59,8 +59,8 @@ public class MenuFragment extends Fragment{
             parent.fill(c -> c.bottom().right().button("", Styles.discordt, ui.discord::show).size(84, 45).name("discord"));
         }else{
             parent.fill(c -> {
-                c.button("", Icon.refresh, () -> {
-                    Core.settings.put("updateurl", (Core.settings.getString("updateurl") + "-builds").replaceFirst("(-builds){2}", ""));
+                c.bottom().right().button("Switch to v6", Icon.download, () -> {
+                    Core.settings.put("updateurl", ("mindustry-antigrief/mindustry-client-v6-builds"));
                     ui.loadfrag.show();
                     becontrol.checkUpdate(result -> {
                         ui.loadfrag.hide();
@@ -70,7 +70,20 @@ public class MenuFragment extends Fragment{
                             becontrol.showUpdateDialog();
                         }
                     });
-                }).size(200, 60).padRight(10).update(t -> t.getLabel().setText(Core.settings.getString("updateurl").endsWith("-builds") ? "@client.switchstable" : "@client.switchunstable"));
+                }).size(200, 60).padRight(10);
+
+                c.button("", Icon.refresh, () -> {
+                    Core.settings.put("updateurl", (Core.settings.getString("updateurl") + "-v7-builds").replaceFirst("((-v6|-v7)?-builds) {2}", ""));
+                    ui.loadfrag.show();
+                    becontrol.checkUpdate(result -> {
+                        ui.loadfrag.hide();
+                        if(!result){
+                            ui.showInfo("@be.noupdates");
+                        } else {
+                            becontrol.showUpdateDialog();
+                        }
+                    });
+                }).size(200, 60).padRight(10).update(t -> t.getLabel().setText(Core.settings.getString("updateurl").endsWith("-builds") ? "@client.switchstable" : "@client.switchunstable")).disabled(true); // FINISHME: Re-enable when v7 releases
 
                 c.bottom().right().button("@be.check", Icon.refresh, () -> {
                     ui.loadfrag.show();
