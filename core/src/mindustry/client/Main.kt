@@ -6,7 +6,6 @@ import arc.math.geom.*
 import arc.struct.*
 import arc.util.Interval
 import kotlinx.coroutines.*
-import arc.util.*
 import mindustry.*
 import mindustry.client.antigrief.*
 import mindustry.client.communication.*
@@ -25,7 +24,6 @@ import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
 import java.security.Security
 import java.security.cert.X509Certificate
 import java.time.Instant
-import kotlin.random.Random
 
 object Main : ApplicationListener {
     lateinit var communicationSystem: SwitchableCommunicationSystem
