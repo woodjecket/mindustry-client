@@ -137,9 +137,11 @@ object TLS {
         }
 
         fun peerPrincipal(): X500Principal? {
-            // this is disgusting
-//            return socket?.reflect<BCSSLConnection>("connection").apply { println("socket = $this") }?.reflect<Any>("session").apply { println("session = $this") }?.reflectInvoke<org.bouncycastle.tls.Certificate>("getPeerCertificateTLS").apply { println("peer cert = $this\nentries=${this?.certificateEntryList?.contentToString()}\n${this?.certificateEntryList?.joinToString { it.extensions.toList().joinToString { "${it.first}: ${it.second}" } }}") }
             return (socket as? BCSSLSocket)?.connection?.session?.peerPrincipal as? X500Principal
+        }
+
+        fun peerCert(): X509Certificate? {
+            return (socket as? BCSSLSocket)?.connection?.session?.peerCertificates?.getOrNull(0) as? X509Certificate
         }
     }
 

@@ -5,6 +5,8 @@ import arc.graphics.*
 import arc.input.KeyCode
 import arc.math.*
 import arc.util.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import mindustry.Vars
 import mindustry.Vars.*
 import mindustry.client.ClientVars.*
@@ -24,6 +26,7 @@ import mindustry.gen.*
 import mindustry.input.*
 import mindustry.net.*
 import mindustry.world.blocks.power.*
+import java.security.cert.X509Certificate
 import java.util.*
 import kotlin.math.*
 import kotlin.random.*
@@ -252,16 +255,6 @@ object Client {
             else player.sendMessage("[accent]${build.block.localizedName} at (${build.tileX()}, ${build.tileY()}) in use for communication.")
         }
 
-        register("e <destination> <message...>", Core.bundle.get("client.command.e.description")) { args, _ ->
-            for (key in Main.messageCrypto.keys) {
-                if (key.name.equals(args[0], true)) {
-                    Main.messageCrypto.encrypt(args[1], key)
-                    return@register
-                }
-            }
-            Toast(3f).add("@client.invalidkey")
-        }
-
         register("fixpower [c]", Core.bundle.get("client.command.fixpower.description")) { args, player ->
             val confirmed = args.any() && args[0] == "c" // Don't configure by default
             var n = 0
@@ -291,15 +284,27 @@ object Client {
             }
         }
 
-        register("connect <id>") { args: Array<String>, _: Player ->
-            Main.connectTLS(args[0].toIntOrNull() ?: return@register)
-        }
-
-        register("encrypted <id> [message...]") { args: Array<String>, player: Player ->
-            val id = args[0].toIntOrNull() ?: return@register
-            val session = Main.tlsSessions.find { it.player == id } ?: return@register
-            session.commsClient.send(MessageTransmission(args[1]))
-            ui.chatfrag.addMessage(args[1], "${player.name} [coral]to [white]${Groups.player.getByID(id).name}", Color.green.cpy().mul(0.25f))
+        register("e <certname> [message...]") { args: Array<String>, player: Player ->
+            Main.mainScope.launch {
+                val name = args.getOrNull(0) ?: return@launch
+                val store = Main.keyStorage ?: return@launch
+                val cert = store.trustStore.aliases().toList()
+                    .mapNotNull { store.trustStore.getCertificate(it) as? X509Certificate }
+                    .find { it.readableName == name } ?: return@launch
+                val session = Main.tlsSessions.find { it.peer.peerCert() == cert } ?: run {
+                    player.sendMessage("client.connectingtls".bundle())
+                    Main.connectTLS(cert)
+                    val out = Main.tlsSessions.find { it.peer.peerCert() == cert }
+                    if (out != null) player.sendMessage("client.connectedtls".bundle()) else player.sendMessage("client.tlsfailure".bundle())
+                    out
+                } ?: return@launch
+                session.commsClient.send(MessageTransmission(args[1]))
+                ui.chatfrag.addMessage(
+                    args[1],
+                    "${store.cert()?.readableName} [coral]to [white]${cert.readableName}",  //todo bundle
+                    Color.green.cpy().mul(0.35f)
+                )
+            }
         }
     }
 

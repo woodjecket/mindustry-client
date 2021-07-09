@@ -19,7 +19,9 @@ import mindustry.gen.Groups
 import mindustry.input.*
 import org.bouncycastle.asn1.x500.style.BCStyle
 import org.bouncycastle.cert.jcajce.JcaX500NameUtil
+import java.security.cert.X509Certificate
 import java.time.Instant
+import kotlin.random.Random
 
 object Main : ApplicationListener {
     lateinit var communicationSystem: SwitchableCommunicationSystem
@@ -30,6 +32,7 @@ object Main : ApplicationListener {
     val tlsSessions = mutableListOf<TLSSession>()
     val mainScope = CoroutineScope(Dispatchers.Default)
     var keyStorage: KeyStorage? = null
+    private val waitingForCertResponse = mutableListOf<(TLSCertFinder, Int) -> Unit>()
 
     data class TLSSession(val player: Int, val peer: TLS.TLSPeer) {
         val stale get() = Groups.player?.getByID(player) == null
@@ -91,23 +94,19 @@ object Main : ApplicationListener {
                 }
                 is TLSRequest -> {
                     if (transmission.destination != communicationSystem.id) return@addListener
-                    println("TLS request from $senderId...")
                     val store = keyStorage ?: return@addListener
 
                     val key = keyStorage?.key() ?: return@addListener
                     val cert = keyStorage?.cert() ?: return@addListener
                     val chain = keyStorage?.certChain() ?: return@addListener
 
-                    println("Creating peer...")
                     val peer = TLS.TLSClient(key, cert, chain, store.trustStore, communicationSystem.id, senderId)
 
                     mainScope.launch {
                         val start = Instant.now()
-                        println("Creating session...")
                         val session = TLSSession(senderId, peer)
                         tlsListeners(session)
                         tlsSessions.add(session)
-                        println("Waiting for handshake...")
                         while (!peer.ready && start.age() in 0..30) {
                             delay(100)
                         }
@@ -115,14 +114,21 @@ object Main : ApplicationListener {
                             tlsSessions.remove(session)
                             return@launch
                         }
-                        println("Secure connection established")
                     }
                 }
                 is TLSTransmission -> {
                     if (transmission.destination != communicationSystem.id) return@addListener
                     val session = tlsSessions.find { it.player == senderId } ?: return@addListener
                     session.peer.output.write(transmission.content)
-                    println("Got TLS transmission from $senderId")
+                }
+                is TLSCertFinder -> {
+                    if (senderId == communicationSystem.id) return@addListener
+                    waitingForCertResponse.forEach { it(transmission, senderId) }
+                    if (transmission.response) return@addListener
+                    val cert = keyStorage?.cert() ?: return@addListener
+                    if (cert.serialNumber == transmission.serialNum) {
+                        communicationClient.send(TLSCertFinder(cert.serialNumber, true))
+                    }
                 }
             }
         }
@@ -143,7 +149,6 @@ object Main : ApplicationListener {
                     val bytes = ByteArray(session.peer.input.available())
                     session.peer.input.read(bytes)
                     if (bytes.isEmpty()) continue
-                    println("Flushing ${bytes.size} bytes...")
                     communicationClient.send(TLSTransmission(session.player, bytes))
                 }
                 delay(500)
@@ -206,46 +211,59 @@ object Main : ApplicationListener {
         dispatchedBuildPlans.addAll(toSend)
     }
 
-    fun connectTLS(player: Int) {
-        println("Initiating handshake with $player...")
+    private suspend fun playerIDFromCert(certificate: X509Certificate): Int? {
+        communicationClient.send(TLSCertFinder(certificate.serialNumber, false))
+        var num: Int? = null
+        val job = mainScope.launch { delay(11_000) }
+        val listener: (TLSCertFinder, Int) -> Unit = { transmission, id ->
+            if (transmission.serialNum == certificate.serialNumber && transmission.response) {
+                num = id
+                job.cancel()
+            }
+        }
+        waitingForCertResponse.add(listener)
+        job.join()
+        waitingForCertResponse.remove(listener)
+        return num
+    }
 
+    suspend fun connectTLS(certificate: X509Certificate) {
+        val id = playerIDFromCert(certificate) ?: return
+        connectTLS(id, certificate)
+    }
+
+    private suspend fun connectTLS(player: Int, expectedCertificate: X509Certificate) {
         val store = keyStorage ?: return
 
         val key = keyStorage?.key() ?: return
         val cert = keyStorage?.cert() ?: return
         val chain = keyStorage?.certChain() ?: return
 
-        println("Creating server...")
         val peer = TLS.TLSServer(key, cert, chain, store.trustStore, communicationSystem.id, player)
 
-        mainScope.launch {
-            val start = Instant.now()
-            println("Creating session...")
-            val session = TLSSession(player, peer)
-            tlsListeners(session)
-            println("Session created, adding to list")
-            tlsSessions.add(session)
-            println("Sending request")
-            communicationClient.send(TLSRequest(player, cert.serialNumber))  //todo remove serial number it's useless
-            while (!peer.ready && start.age() in 0..30) {
-                delay(100)
-            }
-            println("Ready maybe?")
-            if (start.age() >= 30) {
-                tlsSessions.remove(session)
-                println("Nope just timeout :(")
-                return@launch
-            }
-            println("Secure connection established")
+        val start = Instant.now()
+        val session = TLSSession(player, peer)
+        tlsListeners(session)
+        tlsSessions.add(session)
+        communicationClient.send(TLSRequest(player))
+        while (!peer.ready && start.age() in 0..30) {
+            delay(100)
+        }
+        if (start.age() >= 30) {
+            tlsSessions.remove(session)
+            return
+        }
+        if (peer.peerCert() != expectedCertificate) {
+            tlsSessions.remove(session)
         }
     }
 
-    fun tlsListeners(session: TLSSession) {
+    private fun tlsListeners(session: TLSSession) {
         session.commsClient.addListener { transmission, _ ->
             when (transmission) {
                 is MessageTransmission -> {
                     val name = JcaX500NameUtil.getX500Name(session.peer.peerPrincipal()).getRDNs(BCStyle.CN).firstOrNull()?.first?.value
-                    Vars.ui.chatfrag.addMessage(transmission.content, "$name [coral]to [white]${Vars.player.name}", Color.green.cpy().mul(0.25f))
+                    Vars.ui.chatfrag.addMessage(transmission.content, "$name [coral]to [white]${Vars.player.name}", Color.green.cpy().mul(0.35f))  //todo bundle?
                 }
             }
         }

@@ -2,6 +2,7 @@
 
 package mindustry.client.utils
 
+import arc.Core
 import arc.scene.*
 import arc.scene.ui.*
 import arc.scene.ui.layout.*
@@ -12,11 +13,15 @@ import mindustry.core.*
 import mindustry.ui.*
 import mindustry.ui.dialogs.*
 import mindustry.world.*
+import org.bouncycastle.asn1.x500.style.BCStyle
+import org.bouncycastle.cert.jcajce.JcaX500NameUtil
 import java.io.*
 import java.nio.*
+import java.security.cert.X509Certificate
 import java.time.*
 import java.time.temporal.*
 import java.util.zip.*
+import javax.security.auth.x500.X500Principal
 import kotlin.experimental.or
 import kotlin.math.*
 
@@ -198,3 +203,10 @@ fun <A, B> kotlin.Pair<A, B>.eqFlip(a: A, b: B) = this.first == a && this.second
 operator fun ByteArray.get(range: IntRange): ByteArray {
     return copyOfRange(range.first, range.last)
 }
+
+val X500Principal.readableName
+    get() = JcaX500NameUtil.getX500Name(this).getRDNs(BCStyle.CN).firstOrNull()?.first?.value?.toString()
+
+val X509Certificate.readableName get() = subjectX500Principal.readableName
+
+fun String.bundle(): String = Core.bundle[this]

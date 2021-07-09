@@ -149,6 +149,7 @@ class MessageCrypto {
         communicationClient.send(SignatureTransmission(signature, time))
     }
 
+    //finish remove, replaced by TLS
     fun encrypt(message: String, destination: KeyHolder) {
         val time = Instant.now().epochSecond
         val compressor = DeflaterInputStream(message.toByteArray().inputStream())
@@ -165,38 +166,40 @@ class MessageCrypto {
     private fun handle(input: Transmission, sender: Int) {
         try {
             when (input) {
+                //finish see if signing is actually any good
                 is SignatureTransmission -> {
                     received = ReceivedTriple(sender, Instant.now().epochSecond, input)
                     check(player, received)
                 }
-                is EncryptedMessageTransmission -> {
-                    for (key in keys) {
-                        val crypto = key.crypto
-                        try {
-                            val decoded = crypto.decrypt(input.ciphertext)
-
-                            val buffer = ByteBuffer.wrap(decoded)
-                            val timeSent = buffer.long
-                            val validity = buffer.get()
-                            val plaintext = buffer.remainingBytes()
-
-                            if (validity != ENCRYPTION_VALIDITY) continue
-
-                            if (timeSent.toInstant().age() > 3 || input.timeSent.age() > 3) continue
-
-                            val str = plaintext.inflate().decodeToString()
-
-                            fire(
-                                EncryptedMessageEvent(
-                                    sender,
-                                    key,
-                                    str,
-                                    if (sender == communicationClient.communicationSystem.id && Core.app?.isDesktop == true) Vars.player.name else key.name
-                                )
-                            )
-                        } catch (ignored: Exception) {}
-                    }
-                }
+//                //replaced by TLS, finish: remove
+//                is EncryptedMessageTransmission -> {
+//                    for (key in keys) {
+//                        val crypto = key.crypto
+//                        try {
+//                            val decoded = crypto.decrypt(input.ciphertext)
+//
+//                            val buffer = ByteBuffer.wrap(decoded)
+//                            val timeSent = buffer.long
+//                            val validity = buffer.get()
+//                            val plaintext = buffer.remainingBytes()
+//
+//                            if (validity != ENCRYPTION_VALIDITY) continue
+//
+//                            if (timeSent.toInstant().age() > 3 || input.timeSent.age() > 3) continue
+//
+//                            val str = plaintext.inflate().decodeToString()
+//
+//                            fire(
+//                                EncryptedMessageEvent(
+//                                    sender,
+//                                    key,
+//                                    str,
+//                                    if (sender == communicationClient.communicationSystem.id && Core.app?.isDesktop == true) Vars.player.name else key.name
+//                                )
+//                            )
+//                        } catch (ignored: Exception) {}
+//                    }
+//                }
             }
         } catch (e: Exception) { e.printStackTrace() }
     }

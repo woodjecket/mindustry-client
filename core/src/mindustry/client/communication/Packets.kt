@@ -21,7 +21,8 @@ object Packets {
         RegisteredTransmission(BuildQueueTransmission::class, ::BuildQueueTransmission),
         RegisteredTransmission(TLSRequest::class, ::TLSRequest),
         RegisteredTransmission(TLSTransmission::class, ::TLSTransmission),
-        RegisteredTransmission(MessageTransmission::class, ::MessageTransmission)
+        RegisteredTransmission(MessageTransmission::class, ::MessageTransmission),
+        RegisteredTransmission(TLSCertFinder::class, ::TLSCertFinder)
     )
 
     private data class RegisteredTransmission<T : Transmission>(val type: KClass<T>, val constructor: (content: ByteArray, id: Long) -> T)

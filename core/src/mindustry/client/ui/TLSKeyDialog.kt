@@ -8,13 +8,11 @@ import arc.scene.ui.layout.Table
 import mindustry.Vars
 import mindustry.client.Main
 import mindustry.client.crypto.KeyStorage
-import mindustry.client.utils.base64
-import mindustry.client.utils.dialog
-import mindustry.client.utils.label
-import mindustry.client.utils.row
+import mindustry.client.utils.*
 import mindustry.gen.Icon
 import mindustry.ui.Styles
 import mindustry.ui.dialogs.BaseDialog
+import org.bouncycastle.asn1.x509.BasicConstraints
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 
@@ -56,6 +54,11 @@ class TLSKeyDialog : BaseDialog("@client.keyshare") {
                         hide()
                         return@showTextInput
                     }
+                    if (text.contains("\\s")) {
+                        hide()
+                        Vars.ui.showInfoFade("@client.keyprincipalspaces")
+                        return@showTextInput
+                    }
                     Main.keyStorage = KeyStorage(Core.settings.dataDirectory.file(), text).apply {  }
                     build()
                 }
@@ -85,6 +88,14 @@ class TLSKeyDialog : BaseDialog("@client.keyshare") {
                         ta.button("@client.importkey") button2@{
                             val factory = CertificateFactory.getInstance("X509")
                             val cert = factory.generateCertificate(keyInput.text?.base64()?.inputStream() ?: return@button2) as? X509Certificate ?: return@button2
+                            if (cert.subjectX500Principal.readableName?.contains("\\s") != false) {
+                                Vars.ui.showInfoFade("@client.keyprincipalspaces")  // spaces break the commands
+                                return@button2
+                            }
+                            if (cert.basicConstraints != -1) {  // don't allow it to be a CA cert
+                                Vars.ui.showInfoFade("@client.evilcert")
+                                return@button2
+                            }
                             Vars.ui.showConfirm("@client.importKey", cert.subjectX500Principal.name) {
                                 store.trust(cert)
                                 regenerate()
