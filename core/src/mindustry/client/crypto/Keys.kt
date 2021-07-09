@@ -6,7 +6,7 @@ import mindustry.client.utils.base64
 import mindustry.client.utils.bytes
 import java.nio.ByteBuffer
 
-/** Holds an ED25519 and X25519 keypair. */
+/** Holds an ED25519 and X25519 keypair. finishme remove */
 class KeyQuad {
     val xPrivateKey: XPrivateKey
     val xPublicKey: XPublicKey

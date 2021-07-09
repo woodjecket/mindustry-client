@@ -6,6 +6,7 @@ import java.nio.*
 import java.time.*
 import kotlin.random.*
 
+/** finishme remove */
 class SignatureTransmission : Transmission {
 
     override var id = Random.nextLong()

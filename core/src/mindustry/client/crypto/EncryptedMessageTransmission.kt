@@ -7,6 +7,7 @@ import mindustry.client.utils.toBytes
 import java.time.Instant
 import kotlin.random.Random
 
+/** finishme remove */
 class EncryptedMessageTransmission : Transmission {
 
     override var id = Random.nextLong()

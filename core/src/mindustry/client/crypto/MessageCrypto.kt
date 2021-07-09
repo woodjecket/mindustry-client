@@ -16,7 +16,7 @@ import java.nio.*
 import java.time.*
 import java.util.zip.*
 
-/** Provides the interface between [Crypto] and a [CommunicationSystem], and handles some UI stuff. */
+/** Provides the interface between [Crypto] and a [CommunicationSystem], and handles some UI stuff. finishme remove */
 class MessageCrypto {
     lateinit var keyQuad: KeyQuad
     lateinit var communicationClient: Packets.CommunicationClient
@@ -71,9 +71,9 @@ class MessageCrypto {
             }
         } catch (ignored: Exception) {}
 
-        Events.on(EventType.SendChatMessageEvent::class.java) { event ->
-            if (ClientVars.signMessages) sign(event.message, keyQuad)
-        }
+//        Events.on(EventType.SendChatMessageEvent::class.java) { event ->
+//            if (ClientVars.signMessages) sign(event.message, keyQuad)
+//        }
         Events.on(EventType.PlayerChatEventClient::class.java) { event ->
             player = PlayerTriple((event.player ?: return@on).id, Instant.now().epochSecond, event.message)
             check(player, received)
@@ -149,7 +149,7 @@ class MessageCrypto {
         communicationClient.send(SignatureTransmission(signature, time))
     }
 
-    //finish remove, replaced by TLS
+    //finishme remove, replaced by TLS
     fun encrypt(message: String, destination: KeyHolder) {
         val time = Instant.now().epochSecond
         val compressor = DeflaterInputStream(message.toByteArray().inputStream())
@@ -166,7 +166,7 @@ class MessageCrypto {
     private fun handle(input: Transmission, sender: Int) {
         try {
             when (input) {
-                //finish see if signing is actually any good
+                //finishme see if signing is actually any good
                 is SignatureTransmission -> {
                     received = ReceivedTriple(sender, Instant.now().epochSecond, input)
                     check(player, received)

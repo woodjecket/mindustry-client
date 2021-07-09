@@ -7,6 +7,7 @@ import mindustry.client.utils.*
 import kotlin.Pair
 
 /**
+ * finishme move to this?
  * Represents a networking host.  Has 65535 ports and an address.  Uses [provider] to send and receive bytes.
  * [connect] opens a connection to another host.
  */

@@ -6,6 +6,7 @@ import com.beust.klaxon.Klaxon
 import mindustry.client.Main
 import mindustry.client.utils.base64
 
+/** finishme remove */
 object KeyFolder : KeyList {
     private val klaxon = Klaxon().converter(KeyHolderJson)
     private var set = mutableSetOf<KeyHolder>()

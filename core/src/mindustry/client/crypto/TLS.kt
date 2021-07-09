@@ -45,6 +45,8 @@ import kotlin.random.Random
 
 /**
  * An object containing utilities for using TLSv1.3.
+ *
+ * finishme support for only server auth
  */
 object TLS {
     val random: SecureRandom = SecureRandom.getInstanceStrong()

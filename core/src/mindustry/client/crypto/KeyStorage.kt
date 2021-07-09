@@ -10,7 +10,7 @@ import java.security.KeyStoreException
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
 
-class KeyStorage(val dataDir: File, name: String) {
+class KeyStorage(private val dataDir: File, name: String) {
     val trustStore: KeyStore = KeyStore.getInstance("PKCS12", "BC")
     val store: KeyStore = KeyStore.getInstance("PKCS12", "BC")
     private val password = "abc123"  // maybe fix?
@@ -22,20 +22,16 @@ class KeyStorage(val dataDir: File, name: String) {
 
     init {
         if (dataDir.resolve(TRUST_STORE_FILENAME).exists()) {
-            println("Trust store exists")
             trustStore.load(dataDir.resolve(TRUST_STORE_FILENAME).inputStream(), null)
         } else {
-            println("Generating empty trust store")
             trustStore.load(null, null)
+            //finishme automatically enroll dev signing certificates
         }
 
         if (dataDir.resolve(KEY_STORE_FILENAME).exists()) {
-            println("Key store exists")
             store.load(dataDir.resolve(KEY_STORE_FILENAME).inputStream(), password.toCharArray())
         } else {
-            println("Generating key store")
             store.load(null, password.toCharArray())
-            println("Generating cert with name $name")
             genKey(name)
         }
 
@@ -72,10 +68,6 @@ class KeyStorage(val dataDir: File, name: String) {
     fun cert(): X509Certificate? = store.getCertificate("cert") as? X509Certificate
 
     fun certChain(): Array<X509Certificate>? = store.getCertificateChain("key").mapNotNull { it as? X509Certificate }.toTypedArray().run { if (this.isEmpty()) null else this }
-
-//    fun key(serialNum: BigInteger): PrivateKey? = store.getKey("key$serialNum", password.toCharArray()) as PrivateKey?
-//
-//    fun cert(serialNum: BigInteger): X509Certificate? = store.getCertificate("cert$serialNum") as X509Certificate?
 
     fun save() {
         store.store(dataDir.resolve(KEY_STORE_FILENAME).outputStream(), password.toCharArray())

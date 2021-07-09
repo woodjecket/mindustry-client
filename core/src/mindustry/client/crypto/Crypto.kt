@@ -28,6 +28,8 @@ typealias EdPrivateKey = Ed25519PrivateKeyParameters
  * Utility object that handles signing and encryption.
  * Uses ED25519 for signing and X25519 to generate a shared AES key.
  * DISCLAIMER: I am not a cryptographer.  This implementation may be buggy.
+ *
+ * finishme remove
  */
 object Crypto : Initializable {
     /** The length of a signature, in bytes. */
