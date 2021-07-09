@@ -6,8 +6,6 @@ import arc.input.KeyCode
 import arc.math.*
 import arc.util.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import mindustry.Vars
 import mindustry.Vars.*
 import mindustry.client.ClientVars.*
 import mindustry.client.Main.setPluginNetworking
@@ -27,11 +25,8 @@ import mindustry.input.*
 import mindustry.net.*
 import mindustry.world.blocks.power.*
 import java.security.cert.X509Certificate
-import java.util.*
 import kotlin.math.*
-import kotlin.random.*
 import kotlin.random.Random
-
 
 object Client {
 

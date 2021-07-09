@@ -19,13 +19,15 @@ import mindustry.gen.Groups
 import mindustry.input.*
 import org.bouncycastle.asn1.x500.style.BCStyle
 import org.bouncycastle.cert.jcajce.JcaX500NameUtil
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
+import java.security.Security
 import java.security.cert.X509Certificate
 import java.time.Instant
 import kotlin.random.Random
 
 object Main : ApplicationListener {
     lateinit var communicationSystem: SwitchableCommunicationSystem
-    lateinit var messageCrypto: MessageCrypto
     lateinit var communicationClient: Packets.CommunicationClient
     private var dispatchedBuildPlans = mutableListOf<BuildPlan>()
     private val buildPlanInterval = Interval()
@@ -41,7 +43,10 @@ object Main : ApplicationListener {
 
     /** Run on client load. */
     override fun init() {
-        Crypto.initializeAlways()
+        val bouncy = BouncyCastleProvider()
+        Security.addProvider(bouncy)
+        Security.addProvider(BouncyCastleJsseProvider(bouncy))
+
         if (Core.app.isDesktop) {
             communicationSystem = SwitchableCommunicationSystem(MessageBlockCommunicationSystem, PluginCommunicationSystem)
             communicationSystem.init()
@@ -59,9 +64,6 @@ object Main : ApplicationListener {
             communicationSystem.init()
         }
         communicationClient = Packets.CommunicationClient(communicationSystem)
-        messageCrypto = MessageCrypto()
-        messageCrypto.init(communicationClient)
-        KeyFolder.initializeAlways()
 
         Navigation.navigator = AStarNavigator
 
