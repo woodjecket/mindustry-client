@@ -36,7 +36,7 @@ class TLSKeyDialog : BaseDialog("@client.keyshare") {
                 store.untrust(cert)
                 regenerate()
             }.padRight(7f)
-            table.label(cert.subjectX500Principal.name)
+            table.label(cert.readableName ?: "unknown")
             keys.row(table)
         }
     }
@@ -59,7 +59,7 @@ class TLSKeyDialog : BaseDialog("@client.keyshare") {
                         Vars.ui.showInfoFade("@client.keyprincipalspaces")
                         return@showTextInput
                     }
-                    Main.keyStorage = KeyStorage(Core.settings.dataDirectory.file(), text).apply {  }
+                    Main.keyStorage = KeyStorage(Core.settings.dataDirectory.file(), text)
                     build()
                 }
             }
