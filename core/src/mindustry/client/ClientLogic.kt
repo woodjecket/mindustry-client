@@ -55,7 +55,7 @@ class ClientLogic {
 
             Core.settings.getBoolOnce("client730") { Core.settings.put("disablemonofont", true) } // FINISHME: Remove later
 
-            if (Main.messageCrypto.base64public() == "wnnWJvq5c60ryrYndufA5i6JVZcHijLoCHMDsnHPVx76jmfThaX+pxnAAGID6l9jVbFefC6tq8SFsBE5mGU0LQ==") { // People spam these and its annoying
+            if (Main.keyStorage?.cert()?.encoded?.base64() == "MIIBRTCB+KADAgECAghLbYs0jVEwITAFBgMrZXAwIDEeMBwGA1UEAwwVWyMwMGUzMzldYnV0aGVkMDEwMjAzMB4XDTIxMDcwOTE4MzA0MloXDTI2MDcwOTE4MzA0MlowIDEeMBwGA1UEAwwVWyMwMGUzMzldYnV0aGVkMDEwMjAzMCowBQYDK2VwAyEAcGK1U/6uaC/49qaV9Osuv+kOzL6h/Q1S6z4gXN7HR4qjUDBOMA8GA1UdEQQIMAaHBH8AAAEwHQYDVR0OBBYEFPHcKz1gKXBrOOH8C77aa6W7zjbBMA4GA1UdDwEB/wQEAwIBjjAMBgNVHRMEBTADAQH/MAUGAytlcANBABBgb2Rsiz+ZgQlCm6vpJQln4nGfhraPDyr1n4NQoiCU3wPIQW8n2GRGGKcYWE9ytFKBgi0bFgcS1WjBFtqoxAk=") { // People spam these and its annoying
                 Client.register("poli", "Spelling is hard. This will make sure you never forget how to spell the plural of poly, you're welcome.") { _, _ ->
                     Call.sendChatMessage("Unlike a roly-poly whose plural is roly-polies, the plural form of poly is polys. Please remember this, thanks! :)")
                 }
