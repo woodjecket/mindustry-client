@@ -75,26 +75,27 @@ class TunneledPacketTests {
         }
     }
 
-    @RepeatedTest(32)
-    fun test() {
-
-        val client1toclient2 = BufferStreamPair()
-        val client2toclient1 = BufferStreamPair()
-
-        val client1 = TunneledCommunicationSystem(0f, client2toclient1.input, client1toclient2.output, 1, 2)
-        val client2 = TunneledCommunicationSystem(0f, client1toclient2.input, client2toclient1.output, 2, 1)
-
-        val gotten = mutableListOf<ByteArray>()
-
-        client1.addListener { input, _ -> gotten.add(input) }
-
-        val array = Random.nextBytes(0b01111110)  // the maximum length
-        client2.send(array)
-
-        Thread.sleep(100)
-
-        Assertions.assertArrayEquals(array, gotten.first())
-    }
+//    // not used so no test needed
+//    @RepeatedTest(32)
+//    fun test() {
+//
+//        val client1toclient2 = BufferStreamPair()
+//        val client2toclient1 = BufferStreamPair()
+//
+//        val client1 = TunneledCommunicationSystem(0f, client2toclient1.input, client1toclient2.output, 1, 2)
+//        val client2 = TunneledCommunicationSystem(0f, client1toclient2.input, client2toclient1.output, 2, 1)
+//
+//        val gotten = mutableListOf<ByteArray>()
+//
+//        client1.addListener { input, _ -> gotten.add(input) }
+//
+//        val array = Random.nextBytes(0b01111110)  // the maximum length
+//        client2.send(array)
+//
+//        Thread.sleep(100)
+//
+//        Assertions.assertArrayEquals(array, gotten.first())
+//    }
 
     @Test
     fun testnetworking() {
@@ -112,29 +113,40 @@ class TunneledPacketTests {
         runBlocking { client1.connect(client2addr, 12.toShort(), 5.toShort()) }
 
         runBlocking {
+//            println("A")
             val sent = Random.nextBytes(512)
+//            println("B")
             var fired = false
+//            println("C")
             client2[12]!!.listeners.add { Assertions.assertArrayEquals(it, sent); fired = true }
+//            println("D")
 
             client1[5]!!.send(sent)
+//            println("E")
 
             delay(1000)  // Give it a second to send everything
             Assertions.assertTrue(fired)  // Make sure it actually happened
+//            println("F")
 
             // New connection to not fire the previous listener
             client1.connect(client2addr, 123, 321)
+//            println("G")
 
             fired = false
             val sent2 = Random.nextBytes(512)
             val client1comms = Packets.CommunicationClient(client1[321]!!.communicationSystem)
             val client2comms = Packets.CommunicationClient(client2[123]!!.communicationSystem)
+//            println("H")
             client2comms.addListener { transmission, senderId -> Assertions.assertArrayEquals((transmission as DummyTransmission).content, sent2); Assertions.assertEquals(senderId, client1addr.num.toInt()); fired = true }
             client1comms.send(DummyTransmission(sent2))
+//            println("I")
             for (i in 0 until 100) {
+//                println("J")
                 client1comms.update()
                 client2comms.update()
                 delay(10)
             }
+//            println("K")
             Assertions.assertTrue(fired)
         }
     }
