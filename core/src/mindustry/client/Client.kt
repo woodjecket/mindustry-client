@@ -8,7 +8,6 @@ import arc.util.*
 import kotlinx.coroutines.launch
 import mindustry.Vars.*
 import mindustry.client.ClientVars.*
-import mindustry.client.Main.setPluginNetworking
 import mindustry.client.Spectate.spectate
 import mindustry.client.antigrief.*
 import mindustry.client.communication.*
@@ -19,7 +18,6 @@ import mindustry.content.*
 import mindustry.core.*
 import mindustry.entities.*
 import mindustry.entities.units.*
-import mindustry.game.EventType.*
 import mindustry.gen.*
 import mindustry.input.*
 import mindustry.net.*
@@ -32,73 +30,17 @@ object Client {
 
     fun initialize() {
         registerCommands()
-
-        Events.on(WorldLoadEvent::class.java) {
-            lastJoinTime = Time.millis();
-            setPluginNetworking(false)
-            PowerInfo.initialize()
-            Navigation.stopFollowing()
-            Navigation.obstacles.clear()
-            configs.clear()
-            ui.unitPicker.type = null
-            control.input.lastVirusWarning = null
-            dispatchingBuildPlans = false
-            hidingBlocks = false
-            hidingUnits = false
-            showingTurrets = false
-            if (state.rules.pvp) ui.announce("[scarlet]Don't use a client in pvp, it's uncool!", 5f)
-        }
-
-        Events.on(ClientLoadEvent::class.java) {
-            val changeHash = Core.files.internal("changelog").readString().hashCode() // Display changelog if the file contents have changed & on first run. (this is really scuffed lol)
-            if (Core.settings.getInt("changeHash") != changeHash) ChangelogDialog.show()
-            Core.settings.put("changeHash", changeHash)
-
-            if (Core.settings.getBool("debug")) Log.level = Log.LogLevel.debug // Set log level to debug if the setting is checked
-            if (Core.settings.getBool("discordrpc")) platform.startDiscord()
-            if (Core.settings.getBool("mobileui")) mobile = !mobile
-
-            Autocomplete.autocompleters.add(BlockEmotes())
-            Autocomplete.autocompleters.add(PlayerCompletion())
-            Autocomplete.autocompleters.add(CommandCompletion())
-
-            Autocomplete.initialize()
-
-            Navigation.navigator.init()
-        }
-
-        Events.on(PlayerJoin::class.java) { e ->
-            if (e.player == null) return@on
-
-            if (Core.settings.getBool("clientjoinleave") && (ui.chatfrag.messages.isEmpty || !ui.chatfrag.messages.first().message.equals("[accent]${e.player.name}[accent] has connected.")) && Time.timeSinceMillis(lastJoinTime) > 10000)
-                player.sendMessage(Core.bundle.format("client.connected", e.player.name))
-        }
-
-        Events.on(PlayerLeave::class.java) { e ->
-            if (e.player == null) return@on
-
-            if (Core.settings.getBool("clientjoinleave") && (ui.chatfrag.messages.isEmpty || !ui.chatfrag.messages.first().message.equals("[accent]${e.player.name}[accent] has disconnected.")))
-                player.sendMessage(Core.bundle.format("client.disconnected", e.player.name))
-        }
+        ClientLogic()
     }
 
     fun update() {
         Navigation.update()
         PowerInfo.update()
-        Spectate.update()
+        Spectate.update() // FIXME: Why is spectate its own class? Move it here, no method is needed just add an `if` like below
         if (!configs.isEmpty) {
             try {
                 if (configRateLimit.allow(Administration.Config.interactRateWindow.num() * 1000L, Administration.Config.interactRateLimit.num())) {
-                    val req = configs.removeLast()
-                    val tile = world.tile(req.x, req.y)
-                    if (tile != null) {
-//                            Object initial = tile.build.config();
-                        req.run()
-                        //                            Timer.schedule(() -> {
-//                                 if(tile.build != null && tile.build.config() == initial) configs.addLast(req); TODO: This can also cause loops
-//                                 if(tile.build != null && req.value != tile.build.config()) configs.addLast(req); TODO: This infinite loops if u config something twice, find a better way to do this
-//                            }, net.client() ? netClient.getPing()/1000f+.05f : .025f);
-                    }
+                    configs.removeLast().run()
                 }
             } catch (e: Exception) {
                 Log.err(e)
@@ -143,6 +85,8 @@ object Client {
             player.sendMessage(Strings.format("[accent]@: @/@", unit.localizedName, player.team().data().countType(unit), Units.getCap(player.team())))
         }
 
+        // FIXME: Add spawn command
+
         register("go [x] [y]", Core.bundle.get("client.command.go.description")) { args, player ->
             try {
                 if (args.size == 2) lastSentPos.set(args[0].toFloat(), args[1].toFloat())
@@ -181,6 +125,10 @@ object Client {
 
         register("builder [options...]", Core.bundle.get("client.command.builder.description")) { args, _: Player ->
             Navigation.follow(BuildPath(if (args.isEmpty()) "" else args[0]))
+        } // TODO: This is so scuffed lol
+
+        register("miner [options...]", Core.bundle.get("client.command.miner.description")) { args, _: Player ->
+            Navigation.follow(MinePath(if (args.isEmpty()) "" else args[0]))
         } // TODO: This is so scuffed lol
 
         register(" [message...]", Core.bundle.get("client.command.!.description")) { args, _ ->
@@ -252,6 +200,7 @@ object Client {
 
         register("fixpower [c]", Core.bundle.get("client.command.fixpower.description")) { args, player ->
             val confirmed = args.any() && args[0] == "c" // Don't configure by default
+            val inProgress = !configs.isEmpty
             var n = 0
             val grids = mutableMapOf<Int, MutableSet<Int>>()
             for (grid in PowerGraph.activeGraphs.filter { g -> g.team == player.team() }) {
@@ -266,14 +215,15 @@ object Client {
                         if (l.add(grid.id) && t.add(link.power.graph.id)) {
                             l.addAll(t)
                             grids[link.power.graph.id] = l
-                            if (confirmed) configs.add(ConfigRequest(nodeBuild.tileX(), nodeBuild.tileY(), link.pos()))
+                            if (confirmed && !inProgress) configs.add(ConfigRequest(nodeBuild.tileX(), nodeBuild.tileY(), link.pos()))
                             n++
                         }
                     }
                 }
             }
             if (confirmed) {
-                player.sendMessage(Core.bundle.format("client.command.fixpower.success", n))
+                if (inProgress) player.sendMessage("The config queue isn't empty, there are ${configs.size} configs queued, there are $n nodes to connect.")
+                else player.sendMessage(Core.bundle.format("client.command.fixpower.success", n))
             } else {
                 player.sendMessage(Core.bundle.format("client.command.fixpower.confirm", n, PowerGraph.activeGraphs.size))
             }

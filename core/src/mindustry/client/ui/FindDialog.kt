@@ -3,14 +3,14 @@ package mindustry.client.ui
 import arc.*
 import arc.graphics.*
 import arc.input.*
-import arc.math.geom.*
 import arc.scene.ui.*
 import arc.scene.ui.layout.*
 import mindustry.*
 import mindustry.Vars.player
+import mindustry.Vars.tilesize
 import mindustry.client.*
 import mindustry.client.utils.*
-import mindustry.ui.*
+import mindustry.entities.*
 import mindustry.ui.dialogs.*
 import mindustry.world.*
 
@@ -25,9 +25,11 @@ object FindDialog : BaseDialog("@find") {
     }
 
     init {
+        var first = true
         for (img in images) {
-            imageTable.add(img)
+            imageTable.add(img).size(64f).padBottom(if (first) 30f else 10f)
             imageTable.row()
+            first = false
         }
         cont.add(inputField)
         cont.row()
@@ -38,28 +40,20 @@ object FindDialog : BaseDialog("@find") {
             if (guesses.size >= images.size) {  // You can never be too careful
                 for (i in images.indices) {
                     val guess = guesses[i]
-                    images[i].setDrawable(guess.icon(Cicon.medium))
+                    images[i].setDrawable(guess.uiIcon)
                 }
             }
         }
 
         keyDown {
-            if (it == KeyCode.escape) {
-                hide()
-            } else if (it == KeyCode.enter) {
-                val filtered = mutableListOf<Tile>()
+            if (it == KeyCode.enter) {
                 val block = guesses[0]
-                Vars.world.tiles.eachTile { tile ->
-                    if (tile.isCenter && tile.block().id == block.id && tile.team() == player.team()) {
-                        filtered.add(tile)
-                    }
-                }
-                val closest = Geometry.findClosest(player.x, player.y, filtered)
+                val closest = Units.findAllyTile(player.team(), player.x, player.y, Float.MAX_VALUE / 2) {t -> t.block == block}
                 if (closest == null) {
                     Vars.ui.chatfrag.addMessage("No ${block.localizedName} was found", "client", Color.coral.cpy().mul(0.75f))
                 } else {
-                    ClientVars.lastSentPos.set(closest.x.toFloat(), closest.y.toFloat())
-                    //TODO: Make the line below use toasts similar to UnitPicker.java
+                    ClientVars.lastSentPos.set(closest.x / tilesize, closest.y / tilesize)
+                    // FIXME: Make the line below use toasts similar to UnitPicker.java
                     Vars.ui.chatfrag.addMessage("Found ${block.localizedName} at ${closest.x},${closest.y} (!go to go there)", "client", Color.coral.cpy().mul(0.75f))
                 }
                 Core.app.post(this::hide)
@@ -68,7 +62,7 @@ object FindDialog : BaseDialog("@find") {
 
         setup()
         shown(this::setup)
-        addCloseButton()
+        addCloseListener()
     }
 
     private fun setup() {

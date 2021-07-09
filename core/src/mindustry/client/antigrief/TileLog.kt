@@ -108,24 +108,13 @@ class TileRecord(val x: Int, val y: Int) {
     }
 
     fun lastLogs(count: Int): List<TileLog> {
-        try {
-            val num = min(count, size)
-
-            val output = mutableListOf<TileLog>()
-            var logIndex = logs.indexOfLast { size - num in it.range }
-            for (i in size - num until size) {
-                output.add(logs[logIndex].logs[i])
-                if (i + 1 !in logs[logIndex].range) {
-                    logIndex++
-                    if (logIndex >= logs.size) {
-                        break
-                    }
-                }
+        val num = min(count, size)  // Clamp
+        val filtered = logs.filter { it.range.first >= (size - num) }  // Find all sequences that contain or are after the first log we want
+        return filtered
+            .fold<TileLogSequence, MutableList<TileLog>>(mutableListOf()) {  // Concatenate all logs from the filtered sequences
+                    acc, tileLogSequence -> (acc + tileLogSequence).toMutableList()
             }
-            return output
-        } catch (e: IndexOutOfBoundsException) {  // Not totally sure why this happens, but it's an easy 'fix'
-            return emptyList()
-        }
+            .run { drop((size - num).coerceAtLeast(0)) }  // Limit it to the correct length
     }
 
     fun toElement(): Element {

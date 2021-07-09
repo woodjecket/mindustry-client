@@ -6,6 +6,7 @@ import arc.graphics.*;
 import arc.input.*;
 import arc.math.*;
 import arc.scene.ui.*;
+import arc.scene.ui.TextButton.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
@@ -35,6 +36,7 @@ public class JoinDialog extends BaseDialog{
     int totalHosts;
     int refreshes;
     boolean showHidden;
+    TextButtonStyle style;
 
     String lastIp;
     int lastPort;
@@ -44,6 +46,15 @@ public class JoinDialog extends BaseDialog{
     public JoinDialog(){
         super("@joingame");
 
+        style = new TextButtonStyle(){{
+            over = Styles.flatOver;
+            font = Fonts.def;
+            fontColor = Color.white;
+            disabledFontColor = Color.gray;
+            down = Styles.flatOver;
+            up = Styles.black5;
+        }};
+
         loadServers();
 
         if(!steam) buttons.add().width(60f);
@@ -52,9 +63,7 @@ public class JoinDialog extends BaseDialog{
         addCloseButton();
 
         buttons.add().growX().width(-1);
-        if(!steam){
-            buttons.button("?", () -> ui.showInfo("@join.info")).size(60f, 64f).width(-1);
-        }
+        if(!steam) buttons.button("?", () -> ui.showInfo("@join.info")).size(60f, 64f);
 
         add = new BaseDialog("@joingame.title");
         add.cont.add("@joingame.ip").padRight(5f).left();
@@ -99,8 +108,12 @@ public class JoinDialog extends BaseDialog{
         });
 
         onResize(() -> {
-            setup();
-            refreshAll();
+            //only refresh on resize when the minimum dimension is smaller than the maximum preferred width
+            //this means that refreshes on resize will only happen for small phones that need the list to fit in portrait mode
+            if(Math.min(Core.graphics.getWidth(), Core.graphics.getHeight()) / Scl.scl() * 0.9f < 500f){
+                setup();
+                refreshAll();
+            }
         });
     }
 
@@ -119,7 +132,7 @@ public class JoinDialog extends BaseDialog{
             //why are java lambdas this bad
             TextButton[] buttons = {null};
 
-            TextButton button = buttons[0] = remote.button("[accent]" + server.displayIP(), Styles.cleart, () -> {
+            TextButton button = buttons[0] = remote.button("[accent]" + server.displayIP(), style, () -> {
                 if(!buttons[0].childrenPressed()){
                     if(server.lastHost != null){
                         Events.fire(new ClientPreConnectEvent(server.lastHost));
@@ -367,7 +380,7 @@ public class JoinDialog extends BaseDialog{
             for(String address : group.addresses){
                 String resaddress = address.contains(":") ? address.split(":")[0] : address;
                 int resport = address.contains(":") ? Strings.parseInt(address.split(":")[1]) : port;
-                net.pingHost(resaddress, resport, res -> {
+                net.pingHostThread(resaddress, resport, res -> {
                     if(refreshes != cur) return;
                     res.port = resport;
 
@@ -407,7 +420,8 @@ public class JoinDialog extends BaseDialog{
         global.background(null);
         float w = targetWidth();
 
-        container.button(b -> buildServer(host, b), Styles.cleart, () -> {
+        //TODO looks bad
+        container.button(b -> buildServer(host, b), style, () -> {
             Events.fire(new ClientPreConnectEvent(host));
             if(!Core.settings.getBool("server-disclaimer", false)){
                 ui.showCustomConfirm("@warning", "@servers.disclaimer", "@ok", "@back", () -> {
@@ -454,7 +468,7 @@ public class JoinDialog extends BaseDialog{
 
         local.row();
 
-        local.button(b -> buildServer(host, b), Styles.cleart, () -> {
+        local.button(b -> buildServer(host, b), style, () -> {
             Events.fire(new ClientPreConnectEvent(host));
             safeConnect(host.address, host.port, host);
         }).width(w);

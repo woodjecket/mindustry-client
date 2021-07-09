@@ -7,6 +7,7 @@ import arc.func.*;
 import arc.util.*;
 import arc.util.async.*;
 import arc.util.serialization.*;
+import mindustry.*;
 import mindustry.core.*;
 import mindustry.game.EventType;
 import mindustry.gen.*;
@@ -41,7 +42,7 @@ public class BeControl{
     public BeControl(){
         Events.on(EventType.ClientLoadEvent.class, event -> {
             Timer.schedule(() -> {
-                if(!mobile && !Version.clientVersion.equals("v1.0.0, Jan. 1, 1970")){
+                if(!mobile && !Version.clientVersion.equals("v1.0.0, Jan. 1, 1970")){ // Don't auto update on manually cloned copies of the repo
                     checkUpdate(result -> {
                         if (result && checkUpdates) {
                             showUpdateDialog();

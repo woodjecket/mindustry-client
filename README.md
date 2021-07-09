@@ -11,6 +11,7 @@ _[Trello Board](https://trello.com/b/aE2tcUwF/mindustry-40-plans)_
 _[Wiki](https://mindustrygame.github.io/wiki)_  
 _[Javadoc](https://mindustrygame.github.io/docs/)_
 
+## [Changelog](./core/assets/changelog)
 ## [Development/Unstable Builds](../../../mindustry-client-v6-builds)
 ### Running The Jar On Mac
 For whatever reason, MacOS refuses to be normal. Running the jar is slightly harder, open terminal and type `java -XstartOnFirstThread -jar <jar>` where `<jar>` is the path to the jar file (just click and drag the file in).
@@ -47,7 +48,7 @@ See [CONTRIBUTING](CONTRIBUTING.md).
 Bleeding-edge builds are generated automatically for every commit. You can see them [here](https://github.com/Anuken/MindustryBuilds/releases).
 
 If you'd rather compile on your own, follow these instructions.
-First, make sure you have [JDK 14](https://adoptopenjdk.net/) installed. Open a terminal in the root directory, `cd` to the Mindustry folder and run the following commands:
+First, make sure you have [JDK 16](https://adoptopenjdk.net/archive.html?variant=openjdk16&jvmVariant=hotspot) installed. **Other JDK versions will not work.** Open a terminal in the Mindustry directory and run the following commands:
 
 ### Windows
 

@@ -1,6 +1,6 @@
 package mindustry.entities.abilities;
 
-import arc.graphics.g2d.Draw;
+import arc.*;
 import arc.util.*;
 import mindustry.content.*;
 import mindustry.entities.*;
@@ -25,6 +25,11 @@ public class StatusFieldAbility extends Ability{
     }
 
     @Override
+    public String localized(){
+        return Core.bundle.format("ability.statusfield", effect.emoji());
+    }
+
+    @Override
     public void update(Unit unit){
         timer += Time.delta;
 
@@ -32,7 +37,6 @@ public class StatusFieldAbility extends Ability{
             Units.nearby(unit.team, unit.x, unit.y, range, other -> {
                 other.apply(effect, duration);
             });
-            Draw.alpha(UnitType.alpha);
             activeEffect.at(unit);
 
             timer = 0f;

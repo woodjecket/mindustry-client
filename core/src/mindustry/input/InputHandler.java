@@ -41,18 +41,19 @@ import mindustry.world.blocks.distribution.*;
 import mindustry.world.blocks.logic.*;
 import mindustry.world.blocks.payloads.*;
 import mindustry.world.blocks.power.*;
-import mindustry.world.blocks.storage.CoreBlock.*;
 import mindustry.world.blocks.units.*;
 import mindustry.world.meta.*;
 
 import java.util.*;
 
 import static arc.Core.*;
+import static mindustry.Vars.net;
 import static mindustry.Vars.*;
 
 public abstract class InputHandler implements InputProcessor, GestureListener{
     /** Used for dropping items. */
     final static float playerSelectRange = mobile ? 17f : 11f;
+    final static IntSeq removed = new IntSeq();
     /** Maximum line length. */
     final static int maxLength = 100;
     final static Rect r1 = new Rect(), r2 = new Rect();
@@ -67,6 +68,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     public Group uiGroup;
     public boolean isBuilding = true, buildWasAutoPaused = false, wasShooting = false;
     public @Nullable UnitType controlledType;
+    public float recentRespawnTimer;
 
     public @Nullable Schematic lastSchematic;
     public GestureDetector detector;
@@ -80,6 +82,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     @Nullable
     public LogicBlock.LogicBuild lastVirusWarning, virusBuild;
     public long lastVirusWarnTime;
+    private static Interval timer = new Interval();
+    private static ChatFragment.ChatMessage commandWarning = null;
 
     public InputHandler(){
         Events.on(UnitDestroyEvent.class, e -> {
@@ -142,6 +146,29 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         }
     }
 
+    @Remote(called = Loc.both, targets = Loc.both, forward = true, unreliable = true)
+    public static void deletePlans(Player player, int[] positions){
+        if(net.server() && !netServer.admins.allowAction(player, ActionType.removePlanned, a -> a.plans = positions)){
+            throw new ValidateException(player, "Player cannot remove plans.");
+        }
+
+        if(player == null) return;
+
+        var it = player.team().data().blocks.iterator();
+        //O(n^2) search here; no way around it
+        outer:
+        while(it.hasNext()){
+            BlockPlan req = it.next();
+
+            for(int pos : positions){
+                if(req.x == Point2.x(pos) && req.y == Point2.y(pos)){
+                    it.remove();
+                    continue outer;
+                }
+            }
+        }
+    }
+
     public static void createItemTransfer(Item item, int amount, float x, float y, Position to, Runnable done){
         Fx.itemTransfer.at(x, y, amount, item.color, to);
         if(done != null){
@@ -153,7 +180,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     public static void requestItem(Player player, Building build, Item item, int amount){
         if(player == null || build == null || !build.interactable(player.team()) || !player.within(build, buildingRange) || player.dead()) return;
 
-        if(Vars.net.server() && (!Units.canInteract(player, build) ||
+        if(net.server() && (!Units.canInteract(player, build) ||
         !netServer.admins.allowAction(player, ActionType.withdrawItem, build.tile(), action -> {
             action.item = item;
             action.itemAmount = amount;
@@ -177,7 +204,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     public static void transferInventory(Player player, Building build){
         if(player == null || build == null || !player.within(build, buildingRange) || build.items == null || player.dead()) return;
 
-        if(Vars.net.server() && (player.unit().stack.amount <= 0 || !Units.canInteract(player, build) ||
+        if(net.server() && (player.unit().stack.amount <= 0 || !Units.canInteract(player, build) ||
         !netServer.admins.allowAction(player, ActionType.depositItem, build.tile, action -> {
             action.itemAmount = player.unit().stack.amount;
             action.item = player.unit().item();
@@ -276,7 +303,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
     @Remote(targets = Loc.both, called = Loc.server)
     public static void requestDropPayload(Player player, float x, float y){
-        if(player == null || Vars.net.client()) return;
+        if(player == null || net.client()) return;
 
         Payloadc pay = (Payloadc)player.unit();
 
@@ -306,7 +333,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     public static void dropItem(Player player, float angle){
         if(player == null) return;
 
-        if(Vars.net.server() && player.unit().stack.amount <= 0){
+        if(net.server() && player.unit().stack.amount <= 0){
             throw new ValidateException(player, "Player cannot drop an item.");
         }
 
@@ -320,7 +347,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     public static void rotateBlock(@Nullable Player player, Building build, boolean direction){
         if(build == null) return;
 
-        if(Vars.net.server() && (!Units.canInteract(player, build) ||
+        if(net.server() && (!Units.canInteract(player, build) ||
             !netServer.admins.allowAction(player, ActionType.rotate, build.tile(), action -> action.rotation = Mathf.mod(build.rotation + Mathf.sign(direction), 4)))){
             throw new ValidateException(player, "Player cannot rotate a block.");
         }
@@ -329,11 +356,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             build.lastAccessed = player.name;
             if(Navigation.currentlyFollowing instanceof UnAssistPath path){
                 if(path.assisting == player){
-                    Time.run(2f, () -> {
-                        if (player != null && build != null) {
-                            Call.rotateBlock(Vars.player, build, !direction);
-                        }
-                    });
+                    Time.run(2f, () -> Call.rotateBlock(Vars.player, build, !direction));
                 }
             }
         }
@@ -347,7 +370,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     @Remote(targets = Loc.both, called = Loc.both, forward = true)
     public static void tileConfig(@Nullable Player player, Building build, @Nullable Object value){
         if(build == null) return;
-        if(Vars.net.server() && (!Units.canInteract(player, build) ||
+        if(net.server() && (!Units.canInteract(player, build) ||
                 !netServer.admins.allowAction(player, ActionType.configure, build.tile, action -> action.config = value))) throw new ValidateException(player, "Player cannot configure a tile.");
 
         Object previous = build.config();
@@ -356,15 +379,21 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         build.configured(player == null || player.dead() ? null : player.unit(), value);
         Core.app.post(() -> Events.fire(new ConfigEvent(build, player, value)));
 
-        if(player != null){
+        if(player != null){ // TODO: Move all this client stuff into the ClientLogic class
             if(Navigation.currentlyFollowing instanceof UnAssistPath path){
                 if(path.assisting == player){
                     ClientVars.configs.add(new ConfigRequest(build.tileX(), build.tileY(), previous));
                 }
             }
             if (Core.settings.getBool("commandwarnings") && build instanceof CommandCenter.CommandBuild cmd && build.team == player.team()) {
-                ui.chatfrag.addMessage(bundle.format("client.commandwarn", Strings.stripColors(player.name), cmd.tileX(), cmd.tileY(), cmd.team.data().command.localized()), null);
+                if (commandWarning == null || timer.get(300)) {
+                    commandWarning = ui.chatfrag.addMessage(bundle.format("client.commandwarn", Strings.stripColors(player.name), cmd.tileX(), cmd.tileY(), cmd.team.data().command.localized()), null);
+                } else {
+                    commandWarning.message = bundle.format("client.commandwarn", Strings.stripColors(player.name), cmd.tileX(), cmd.tileY(), cmd.team.data().command.localized());
+                    commandWarning.format();
+                }
                 ClientVars.lastSentPos.set(build.tileX(), build.tileY());
+
             } else if (Core.settings.getBool("powersplitwarnings") && build instanceof PowerNode.PowerNodeBuild node) {
                 if (value instanceof Integer val) {
                     if (new Seq<>((Point2[])previous).contains(Point2.unpack(val).sub(build.tileX(), build.tileY()))) {
@@ -380,7 +409,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                         }
                     }
                 } else if (value instanceof Point2[]) {
-                    //todo
+                    // TODO: handle this
                 }
             }
         }
@@ -396,33 +425,51 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     }
 
     @Remote(targets = Loc.both, called = Loc.both, forward = true)
+    public static void buildingControlSelect(Player player, Building build){
+        if(player == null || build == null || player.dead()) return;
+
+        //make sure player is allowed to control the building
+        if(net.server() && !netServer.admins.allowAction(player, ActionType.buildSelect, action -> action.tile = build.tile)){
+            throw new ValidateException(player, "Player cannot control a building.");
+        }
+
+        if(player.team() == build.team && build.canControlSelect(player)){
+            if (player.isLocal()) player.persistPlans();
+            build.onControlSelect(player);
+        }
+    }
+
+    @Remote(targets = Loc.both, called = Loc.both, forward = true)
     public static void unitControl(Player player, @Nullable Unit unit){
         if(player == null) return;
 
         //make sure player is allowed to control the unit
-        if(Vars.net.server() && !netServer.admins.allowAction(player, ActionType.control, action -> action.unit = unit)){
+        if(net.server() && !netServer.admins.allowAction(player, ActionType.control, action -> action.unit = unit)){
             throw new ValidateException(player, "Player cannot control a unit.");
         }
 
-        player.persistPlans(); // Restore plans after swapping units
+        if (player.isLocal()) player.persistPlans(); // Restore plans after swapping units
 
-        //clear player unit when they possess a core
-        if(unit instanceof BlockUnitc block && block.tile() instanceof CoreBuild build){
-            Fx.spawn.at(player);
-            if(Vars.net.client()){
-                control.input.controlledType = null;
-            }
+        //TODO problem:
+        //1. server send snapshot
+        //2. client requests to control unit, becomes unit locally
+        //3. snapshot arrives, client now thinks they're in the old unit (!!!)
+        //4. server gets packet that player is in the right unit
+        //5. server sends snapshot
+        //6. client gets snapshot, realizes that they are actually in the unit they selected
+        //7. client gets switched to new unit -> rubberbanding (!!!)
 
-            player.clearUnit();
-            player.deathTimer = Player.deathDelay + 1f;
-            build.requestSpawn(player);
-        }else if(unit == null){ //just clear the unit (is this used?)
+        //clear player unit when they possess a core TODO: Ask anuke why this comment is still here
+        if(unit == null){ //just clear the unit (is this used?)
             player.clearUnit();
             //make sure it's AI controlled, so players can't overwrite each other
         }else if(unit.isAI() && unit.team == player.team() && !unit.dead){
-            if(!Vars.net.client()){
-                player.unit(unit);
+            if(net.client() && player.isLocal()){
+                player.justSwitchFrom = player.unit();
+                player.justSwitchTo = unit;
             }
+
+            player.unit(unit);
 
             Time.run(Fx.unitSpirit.lifetime, () -> Fx.unitControl.at(unit.x, unit.y, 0f, unit));
             if(!player.dead()){
@@ -433,36 +480,35 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         Events.fire(new UnitControlEvent(player, unit));
     }
 
-    @Remote(targets = Loc.both, called = Loc.both, forward = true)
+    @Remote(targets = Loc.both, called = Loc.server, forward = true)
     public static void unitClear(Player player){
-        if (player == null || !player.dead() && player.unit().spawnedByCore && !player.isLocal()) return;
-        if (player.isLocal()) {
-            player.persistPlans();
-            if (player.unit() != null && !player.dead() && player.unit().spawnedByCore && player.bestCore() != null) Call.unitControl(player, player.bestCore().unit()); // Bypass vanilla code which prevents you from respawning at core when already a core unit
-        }
+        if(player == null) return;
+
+        if(player.isLocal()) player.persistPlans();
+        //problem: this gets called on both ends. it shouldn't be.
         Fx.spawn.at(player);
         player.clearUnit();
+        player.checkSpawn();
         player.deathTimer = Player.deathDelay + 1f; //for instant respawn
     }
 
     @Remote(targets = Loc.both, called = Loc.server, forward = true)
     public static void unitCommand(Player player){
-        if(player == null || player.dead() || !(player.unit() instanceof Commanderc commander)) return;
+        if(player == null || player.dead() || (player.unit() == null)) return;
 
         //make sure player is allowed to make the command
-        if(Vars.net.server() && !netServer.admins.allowAction(player, ActionType.command, action -> {})){
+        if(net.server() && !netServer.admins.allowAction(player, ActionType.command, action -> {})){
             throw new ValidateException(player, "Player cannot command a unit.");
         }
 
-        if(commander.isCommanding()){
-            commander.clearCommand();
+        if(player.unit().isCommanding()){
+            player.unit().clearCommand();
         }else if(player.unit().type.commandLimit > 0){
 
             //TODO try out some other formations
-            commander.commandNearby(new CircleFormation());
-            Fx.commandSend.at(player);
+            player.unit().commandNearby(new CircleFormation());
+            Fx.commandSend.at(player, player.unit().type.commandRadius);
         }
-
     }
 
     public Eachable<BuildPlan> allRequests(){
@@ -475,10 +521,6 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
     public boolean isUsingSchematic(){
         return !selectRequests.isEmpty();
-    }
-
-    public OverlayFragment getFrag(){
-        return frag;
     }
 
     public void update(){
@@ -494,7 +536,9 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
         wasShooting = player.shooting;
 
-        if(!player.dead()){
+        //only reset the controlled type and control a unit after the timer runs out
+        //essentially, this means the client waits for ~1 second after controlling something before trying to control something else automatically
+        if(!player.dead() && (recentRespawnTimer -= Time.delta / 70f) <= 0f && player.justSwitchFrom != player.unit()){
             controlledType = player.unit().type;
         }
 
@@ -502,7 +546,9 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             Unit unit = Units.closest(player.team(), player.x, player.y, u -> !u.isPlayer() && u.type == controlledType && !u.dead /* TODO: Make this a thing that actually works? && (!(u.controller() instanceof FormationAI f) || f.isBeingControlled(player.lastReadUnit)) */);
 
             if(unit != null){
-                if(!Vars.net.client() || controlInterval.get(10f)){
+                //only trying controlling once a second to prevent packet spam
+                if(!net.client() || controlInterval.get(70f)){
+                    recentRespawnTimer = 1f;
                     Call.unitControl(player, unit);
                 }
             }
@@ -517,7 +563,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             }
 
             if(unit != null){
-                if(Vars.net.client()){
+                if(net.client()){
                     Call.unitControl(player, unit);
                 }else{
                     unit.controller(player);
@@ -603,7 +649,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
     public boolean requestMatches(BuildPlan request){
         Tile tile = world.tile(request.x, request.y);
-        return tile != null && tile.build instanceof ConstructBuild cons && cons.cblock == request.block;
+        return tile != null && tile.build instanceof ConstructBuild cons && cons.current == request.block;
     }
 
     public void drawBreaking(int x, int y){
@@ -644,6 +690,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         int ox = schemOriginX(), oy = schemOriginY();
 
         requests.each(req -> {
+            if(req.breaking) return;
+
             req.pointConfig(p -> {
                 int cx = p.x, cy = p.y;
                 int lx = cx;
@@ -678,6 +726,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         int origin = (x ? schemOriginX() : schemOriginY()) * tilesize;
 
         requests.each(req -> {
+            if(req.breaking) return;
+
             float value = -((x ? req.x : req.y) * tilesize - origin + req.block.offset) + origin;
 
             if(x){
@@ -781,7 +831,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             }
         }
 
-        if (!Vars.net.client()) {
+        if (!net.client()) { // Client's can't see these in vanilla, editing them desyncs
             for (BlockPlan req : player.team().data().blocks) {
                 Block block = content.block(req.block);
                 if (block.bounds(req.x, req.y, Tmp.r2).overlaps(Tmp.r1)) {
@@ -913,16 +963,24 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             }
         }
 
+        removed.clear();
+
         //remove blocks to rebuild
-        Iterator<BlockPlan> broken = state.teams.get(player.team()).blocks.iterator();
-        if (!Vars.net.client()) {
+        Iterator<BlockPlan> broken = player.team().data().blocks.iterator();
+        if (!net.client()) { // Clients can't see these in vanilla, editing them desyncs
             while (broken.hasNext()) {
                 BlockPlan req = broken.next();
                 Block block = content.block(req.block);
-                if (block.bounds(req.x, req.y, Tmp.r2).overlaps(Tmp.r1)) {
+                if (block.bounds(req.x, req.y, Tmp.r2).overlaps(Tmp.r1)){
+                    removed.add(Point2.pack(req.x, req.y));
                     broken.remove();
                 }
             }
+        }
+
+        //TODO array may be too large?
+        if(removed.size > 0 && net.active()){
+            Call.deletePlans(player, removed.toArray());
         }
     }
 
@@ -1102,9 +1160,9 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         return Core.input.mouseWorld(getMouseX(), getMouseY()).sub(x, y).angle();
     }
 
-    public @Nullable Unit selectedUnit(){
+    public @Nullable Unit selectedUnit(boolean allowPlayers){
         if (ClientVars.hidingUnits) return null;
-        Unit unit = Units.closest(player.team(), Core.input.mouseWorld().x, Core.input.mouseWorld().y, input.shift() ? 100f : 40f, Unitc::isAI);
+        Unit unit = Units.closest(player.team(), Core.input.mouseWorld().x, Core.input.mouseWorld().y, input.shift() ? 100f : 40f, allowPlayers ? u -> true : Unitc::isAI);
         if(unit != null){
             unit.hitbox(Tmp.r1);
             Tmp.r1.grow(input.shift() ? tilesize * 6 : 6f ); // If shift is held, add 3 tiles of leeway, makes it easier to shift click units controlled by processors and such
@@ -1118,6 +1176,18 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             return cont.unit();
         }
 
+        return null;
+    }
+
+    public @Nullable Unit selectedUnit() {
+        return selectedUnit(false);
+    }
+
+    public @Nullable Building selectedControlBuild(){
+        Building build = world.buildWorld(Core.input.mouseWorld().x, Core.input.mouseWorld().y);
+        if(build != null && !player.dead() && build.canControlSelect(player) && build.team == player.team()){
+            return build;
+        }
         return null;
     }
 
@@ -1301,13 +1371,15 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             line.x = point.x;
             line.y = point.y;
             if(!overrideLineRotation || diagonal){
+                int result = baseRotation;
                 if(next != null){
-                    line.rotation = Tile.relativeTo(point.x, point.y, next.x, next.y);
+                    result = Tile.relativeTo(point.x, point.y, next.x, next.y);
                 }else if(block.conveyorPlacement && i > 0){
                     Point2 prev = points.get(i - 1);
-                    line.rotation = Tile.relativeTo(prev.x, prev.y, point.x, point.y);
-                }else{
-                    line.rotation = baseRotation;
+                    result = Tile.relativeTo(prev.x, prev.y, point.x, point.y);
+                }
+                if(result != -1){
+                    line.rotation = result;
                 }
             }else{
                 line.rotation = rotation;

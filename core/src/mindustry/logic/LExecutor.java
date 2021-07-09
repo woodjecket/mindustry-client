@@ -5,7 +5,6 @@ import arc.graphics.*;
 import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
-import arc.util.noise.*;
 import mindustry.*;
 import mindustry.ai.types.*;
 import mindustry.client.*;
@@ -30,9 +29,6 @@ import static mindustry.Vars.*;
 
 public class LExecutor{
     public static final int maxInstructions = 1000;
-
-    //for noise operations
-    public static final Simplex noise = new Simplex();
 
     //special variables
     public static final int
@@ -342,6 +338,7 @@ public class LExecutor{
         public static LogicAI checkLogicAI(LExecutor exec, Object unitObj){
             if(unitObj instanceof Unit unit && exec.obj(varUnit) == unit && unit.team == exec.team && !unit.isPlayer() && !(unit.controller() instanceof FormationAI)){
                 if(unit.controller() instanceof LogicAI la){
+                    la.controller = exec.building(varThis);
                     return la;
                 }else{
                     var la = new LogicAI();
@@ -467,7 +464,7 @@ public class LExecutor{
                             if (conf instanceof LogicBlock.LogicBuild) {
                                 LogicBlock.LogicBuild build = (LogicBlock.LogicBuild) exec.building(varThis);
                                 if (build != null && !build.isVirus) {
-                                    ui.chatfrag.addMessage(Strings.format("@ has potentially placed a logic virus at (@, @) [accent]SHIFT + @ to view", player.name, build.tileX(), build.tileY(), Core.keybinds.get(Binding.navigate_to_camera).key.name()), null, Color.scarlet.cpy().mul(.75f));
+                                    ui.chatfrag.addMessage(Strings.format("@ has potentially placed a logic virus at (@, @) [accent]SHIFT + @ to view", build.lastAccessed, build.tileX(), build.tileY(), Core.keybinds.get(Binding.navigate_to_camera).key.name()), null, Color.scarlet.cpy().mul(.75f));
                                     control.input.lastVirusWarning = build;
                                     control.input.lastVirusWarnTime = Time.millis();
                                     ClientVars.lastSentPos.set(build.tileX(), build.tileY());
@@ -553,7 +550,7 @@ public class LExecutor{
         public void run(LExecutor exec){
             Object obj = exec.obj(target);
             if(obj instanceof Building b && b.team == exec.team && exec.linkIds.contains(b.id)){
-                if(type.isObj){
+                if(type.isObj && exec.var(p1).isobj){
                     b.control(type, exec.obj(p1), exec.num(p2), exec.num(p3), exec.num(p4));
                 }else{
                     b.control(type, exec.num(p1), exec.num(p2), exec.num(p3), exec.num(p4));
@@ -780,7 +777,6 @@ public class LExecutor{
             Var v = exec.var(to);
             Var f = exec.var(from);
 
-            //TODO error out when the from-value is a constant
             if(!v.constant){
                 if(f.isobj){
                     v.objval = f.objval;
@@ -879,7 +875,7 @@ public class LExecutor{
         }
 
         static int packSign(int value){
-            return (Math.abs(value) & 0b011111111) | (value < 0 ? 0b1000000000 : 0);
+            return (Math.abs(value) & 0b0111111111) | (value < 0 ? 0b1000000000 : 0);
         }
     }
 
@@ -934,6 +930,7 @@ public class LExecutor{
                     v.objval instanceof Content ? "[content]" :
                     v.objval instanceof Building build ? build.block.name :
                     v.objval instanceof Unit unit ? unit.type.name :
+                    v.objval instanceof Enum<?> e ? e.name() :
                     "[object]";
 
                 exec.textBuffer.append(strValue);
@@ -1036,6 +1033,26 @@ public class LExecutor{
                 curTime += Time.delta / 60f;
                 frameId = Core.graphics.getFrameId();
             }
+        }
+    }
+
+    public static class LookupI implements LInstruction{
+        public int dest;
+        public int from;
+        public ContentType type;
+
+        public LookupI(int dest, int from, ContentType type){
+            this.dest = dest;
+            this.from = from;
+            this.type = type;
+        }
+
+        public LookupI(){
+        }
+
+        @Override
+        public void run(LExecutor exec){
+            exec.setobj(dest, constants.lookupContent(type, exec.numi(from)));
         }
     }
 

@@ -10,11 +10,12 @@ import mindustry.world.meta.*;
 
 public class Weathers implements ContentList{
     public static Weather
-            rain,
-            snow,
-            sandstorm,
-            sporestorm,
-            fog;
+    rain,
+    snow,
+    sandstorm,
+    sporestorm,
+    fog,
+    suspendParticles;
 
     @Override
     public void load(){
@@ -101,6 +102,20 @@ public class Weathers implements ContentList{
             attrs.set(Attribute.light, -0.3f);
             attrs.set(Attribute.water, 0.05f);
             opacityMultiplier = 0.47f;
+        }};
+
+        suspendParticles = new ParticleWeather("suspend-particles"){{
+            color = noiseColor = Color.valueOf("a7c1fa");
+            particleRegion = "particle";
+            statusGround = false;
+            useWindVector = true;
+            hidden = true;
+            sizeMax = 4f;
+            sizeMin = 1.4f;
+            minAlpha = 0.5f;
+            maxAlpha = 1f;
+            density = 10000f;
+            baseSpeed = 0.03f;
         }};
     }
 }

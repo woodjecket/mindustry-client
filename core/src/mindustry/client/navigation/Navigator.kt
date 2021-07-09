@@ -1,16 +1,8 @@
 package mindustry.client.navigation
 
-import arc.math.geom.Circle
-import arc.math.geom.Point2
-import arc.math.geom.Vec2
-import arc.struct.Seq
-import mindustry.client.navigation.TurretPathfindingEntity
-import mindustry.Vars
-import mindustry.ai.Pathfinder
-import mindustry.client.utils.get
-import mindustry.gen.Legsc
-import mindustry.gen.PathTile
-import mindustry.gen.WaterMovec
+import arc.math.geom.*
+import mindustry.Vars.*
+import mindustry.game.*
 
 /** An abstract class for a navigation algorithm, i.e. A*.  */
 abstract class Navigator {
@@ -31,12 +23,12 @@ abstract class Navigator {
     ): Array<Vec2>
 
     fun navigate(start: Vec2, end: Vec2, obstacles: Array<TurretPathfindingEntity>): Array<Vec2> {
-        start.clamp(0f, 0f, Vars.world.unitHeight().toFloat(), Vars.world.unitWidth().toFloat())
-        end.clamp(0f, 0f, Vars.world.unitHeight().toFloat(), Vars.world.unitWidth().toFloat())
+        start.clamp(0f, 0f, world.unitHeight().toFloat(), world.unitWidth().toFloat())
+        end.clamp(0f, 0f, world.unitHeight().toFloat(), world.unitWidth().toFloat())
         val realObstacles = mutableListOf<Circle>()
         val additionalRadius =
-            if (Vars.player.unit().formation == null) Vars.player.unit().hitSize / 2 else Vars.player.unit()
-                .formation().pattern.radius() + Vars.player.unit().formation.pattern.spacing / 2
+            if (player.unit().formation == null) player.unit().hitSize / 2
+            else player.unit().formation().pattern.radius() + player.unit().formation.pattern.spacing / 2
         for (turret in obstacles) {
             if (turret.canHitPlayer && turret.canShoot) realObstacles.add(
                 Circle(
@@ -46,19 +38,22 @@ abstract class Navigator {
                 )
             )
         }
-        if (Vars.state.hasSpawns()) { // TODO: These should really be weighed less than turrets...
-            for (spawn in Vars.spawner.spawns) {
+        if (state.hasSpawns()) { // TODO: These should really be weighed less than turrets...
+            for (spawn in spawner.spawns) {
                 realObstacles.add(
                     Circle(
                         spawn.worldx(),
                         spawn.worldy(),
-                        Vars.state.rules.dropZoneRadius + additionalRadius
+                        state.rules.dropZoneRadius + additionalRadius
                     )
                 )
             }
         }
+        val flood = ui.join.lastHost != null && (ui.join.lastHost.modeName ?: false) == "Flood"
         return findPath(
-            start, end, realObstacles.toTypedArray(), Vars.world.unitWidth().toFloat(), Vars.world.unitHeight().toFloat()
-        ) { x, y -> Vars.player.unit().solidity()?.solid(x, y) ?: false }
+            start, end, realObstacles.toTypedArray(), world.unitWidth().toFloat(), world.unitHeight().toFloat()
+        ) { x, y ->
+            flood && world.tiles.getc(x, y).team() == Team.blue || player.unit().type != null && !player.unit().type.canBoost && player.unit().solidity()?.solid(x, y) ?: false
+        }
     }
 }

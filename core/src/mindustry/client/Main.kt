@@ -6,6 +6,7 @@ import arc.math.geom.*
 import arc.struct.*
 import arc.util.Interval
 import kotlinx.coroutines.*
+import arc.util.*
 import mindustry.*
 import mindustry.client.antigrief.*
 import mindustry.client.communication.*
@@ -48,7 +49,7 @@ object Main : ApplicationListener {
         Security.addProvider(BouncyCastleJsseProvider(bouncy))
 
         if (Core.app.isDesktop) {
-            communicationSystem = SwitchableCommunicationSystem(MessageBlockCommunicationSystem, PluginCommunicationSystem)
+            communicationSystem = SwitchableCommunicationSystem(MessageBlockCommunicationSystem)
             communicationSystem.init()
 
             TileRecords.initialize()
@@ -174,7 +175,7 @@ object Main : ApplicationListener {
     fun setPluginNetworking(enable: Boolean) {
         when {
             enable -> {
-                communicationSystem.activeCommunicationSystem = PluginCommunicationSystem
+                communicationSystem.activeCommunicationSystem = MessageBlockCommunicationSystem //TODO: Re-implement packet plugin
             }
             Core.app?.isDesktop == true -> {
                 communicationSystem.activeCommunicationSystem = MessageBlockCommunicationSystem

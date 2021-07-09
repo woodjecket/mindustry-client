@@ -17,11 +17,10 @@ import arc.util.*;
 import mindustry.*;
 import mindustry.ai.types.*;
 import mindustry.client.*;
-import mindustry.client.antigrief.TileRecords;
+import mindustry.client.antigrief.*;
 import mindustry.client.navigation.*;
 import mindustry.client.navigation.waypoints.*;
-import mindustry.client.ui.FindDialog;
-import mindustry.client.ui.MarkerDialog;
+import mindustry.client.ui.*;
 import mindustry.core.*;
 import mindustry.entities.units.*;
 import mindustry.game.EventType.*;
@@ -198,7 +197,7 @@ public class DesktopInput extends InputHandler{
                 }
                 lineRequests.each(this::drawOverRequest);
             }else if(isPlacing()){
-                if(block.rotate){
+                if(block.rotate && block.drawArrow){
                     drawArrow(block, cursorX, cursorY, rotation);
                 }
                 Draw.color();
@@ -381,7 +380,7 @@ public class DesktopInput extends InputHandler{
                 });
 
                 table.row().fill();
-                table.button("@client.unitpicker", () -> {// Unit Picker / Sniper
+                table.button("@client.unitpicker", () -> { // Unit Picker / Sniper
                     ui.unitPicker.show();
                     table.remove();
                 });
@@ -419,21 +418,28 @@ public class DesktopInput extends InputHandler{
                 scene.add(table);
             }
             if((input.keyDown(Binding.control) || input.shift()) && Core.input.keyTap(Binding.select)){
-                Unit on = selectedUnit();
+                Unit on = selectedUnit(true);
+                var build = selectedControlBuild();
                 if(on != null){
-                    if (input.keyDown(Binding.control)) Call.unitControl(player, on); // Ctrl + click: control unit
+                    if (input.keyDown(Binding.control) && on.isAI()) Call.unitControl(player, on); // Ctrl + click: control unit
+                    else if (input.shift() && on.isPlayer() && !on.isLocal()) Navigation.follow(new AssistPath(on.playerNonNull())); // Shift + click player: quick assist
                     else if (on.controller() instanceof LogicAI p && p.controller != null) Spectate.INSTANCE.spectate(p.controller); // Shift + click logic unit: spectate processor
                     shouldShoot = false;
+                    recentRespawnTimer = 1f;
+                }else if(build != null){
+                    Call.buildingControlSelect(player, build);
+                    recentRespawnTimer = 1f;
                 }
             }
         }
 
-        if(!player.dead() && !state.isPaused() && !(Core.scene.getKeyboardFocus() instanceof TextField)){
+        if(!player.dead() && !state.isPaused() && !scene.hasField()){
             updateMovement(player.unit());
 
-            if(Core.input.keyTap(Binding.respawn) && !scene.hasField()){
-                Call.unitClear(player);
+            if(Core.input.keyTap(Binding.respawn)){
                 controlledType = null;
+                recentRespawnTimer = 1f;
+                Call.unitClear(player);
             }
         }
 
@@ -570,7 +576,7 @@ public class DesktopInput extends InputHandler{
         table.button(Icon.map, Styles.clearPartiali, () -> {
             if (state.isCampaign() && !Vars.net.client()) ui.planet.show();
             else MarkerDialog.INSTANCE.show();
-        }).tooltip(state.isCampaign() ? "@planetmap" : "Map Markers");
+        }).tooltip(state.isCampaign() ? "@planetmap" : "Map Markers"); // FIXME: Doesn't update
 
         table.button(Icon.tree, Styles.clearPartiali, () -> {
             ui.research.show();
@@ -853,17 +859,19 @@ public class DesktopInput extends InputHandler{
                 }
             }else{
                 unit.moveAt(Tmp.v2.trns(unit.rotation, movement.len()));
+                //problem: actual unit rotation is controlled by velocity, but velocity is 1) unpredictable and 2) can be set to 0            if(!movement.isZero()){
                 if(!movement.isZero()){
-                    unit.vel.rotateTo(movement.angle(), unit.type.rotateSpeed * Math.max(Time.delta, 1));
+                    unit.rotation = Angles.moveToward(unit.rotation,movement.angle(), unit.type.rotateSpeed * Math.max(Time.delta, 1));
                 }
             }
             unit.aim(unit.type.faceTarget ? Core.input.mouseWorld() : Tmp.v1.trns(unit.rotation, Core.input.mouseWorld().dst(unit)).add(unit.x, unit.y));
-        }
 
+            // if autoboost, invert the behavior of the boost key
+            player.boosting = (Core.settings.getBool("autoboost") != input.keyDown(Binding.boost)) && !movement.isZero();
+        }
         unit.controlWeapons(true, player.shooting && !boosted);
 
-        // if autoboost, invert the behavior of the boost key
-        player.boosting = (Core.settings.getBool("autoboost") != input.keyDown(Binding.boost)) && !movement.isZero();
+        player.boosting = Core.input.keyDown(Binding.boost);
         player.mouseX = unit.aimX();
         player.mouseY = unit.aimY();
 

@@ -20,12 +20,17 @@ object TileRecords {
         }
 
         Events.on(EventType.BlockBuildBeginEventBefore::class.java) {
+            println("AAAAA ${it.unit.controllerName}")
             if (it.newBlock == null || it.newBlock == Blocks.air) {
                 it.tile.getLinkedTiles { tile ->
                     addLog(tile, TileBreakLog(tile, it.unit.toInteractor(), tile.block()))
                 }
             } else {
+                if (it.unit.controllerName == "foo") println("aaa ${it.tile.x}, ${it.tile.y}")
                 forArea(it.tile, it.newBlock.size) { tile ->
+                    if (it.unit.controllerName == "foo") {
+                        println("${tile.x}, ${tile.y}")
+                    }
                     addLog(tile, TilePlacedLog(tile, it.unit.toInteractor(), it.newBlock, tile.build?.config()))
                 }
             }
@@ -52,9 +57,9 @@ object TileRecords {
         Events.on(EventType.BlockDestroyEvent::class.java) {
             forArea(it.tile) { tile ->
                 addLog(tile, TileDestroyedLog(tile,
-                    if (tile.build is ConstructBlock.ConstructBuild) (tile.build as ConstructBlock.ConstructBuild).cblock ?:
+                    if (tile.build is ConstructBlock.ConstructBuild) (tile.build as ConstructBlock.ConstructBuild).current ?:
                     (tile.build as ConstructBlock.ConstructBuild).previous
-                    else tile.block()))
+                    else tile.block() ?: Blocks.air))
             }
         }
     }

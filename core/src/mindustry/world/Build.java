@@ -10,9 +10,12 @@ import mindustry.content.*;
 import mindustry.entities.*;
 import mindustry.game.EventType.*;
 import mindustry.game.*;
+import mindustry.game.Teams.*;
 import mindustry.gen.*;
 import mindustry.world.blocks.*;
 import mindustry.world.blocks.ConstructBlock.*;
+import mindustry.world.blocks.storage.CoreBlock.*;
+
 import static mindustry.Vars.*;
 
 public class Build{
@@ -34,12 +37,20 @@ public class Build{
 
         int rotation = tile.build != null ? tile.build.rotation : 0;
         Block previous = tile.block();
+
+        Events.fire(new BlockBuildBeginEventBefore(tile, team, unit, true, null));
+
+        //instantly deconstruct if necessary
+        if(previous.instantDeconstruct){
+            ConstructBlock.deconstructFinish(tile, previous, unit);
+            return;
+        }
+
         Block sub = ConstructBlock.get(previous.size);
 
         Seq<Building> prevBuild = new Seq<>(1);
         if(tile.build != null) prevBuild.add(tile.build);
 
-        Events.fire(new BlockBuildBeginEventBefore(tile, team, unit, true, null));
 
         tile.setBlock(sub, team, rotation);
         var build = (ConstructBuild)tile.build;
@@ -78,6 +89,14 @@ public class Build{
             return;
         }
 
+        //break all props in the way
+        tile.getLinkedTilesAs(result, out -> {
+            if(out.block != Blocks.air && out.block.alwaysReplace){
+                out.block.breakEffect.at(out.drawx(), out.drawy(), out.block.size, out.block.mapColor);
+                out.remove();
+            }
+        });
+
         Block previous = tile.block();
         Block sub = ConstructBlock.get(result.size);
         Seq<Building> prevBuild = new Seq<>(9);
@@ -86,7 +105,7 @@ public class Build{
         tmp.clear();
 
         tile.getLinkedTilesAs(result, t -> {
-            ConstructBlock.breakWarning(t, t.block, unit); // This will totally break if warnBlocks contains a multiblock lol
+            ConstructBlock.breakWarning(t, t.block, unit);
             if(t.build != null && t.build.team == team && tmp.add(t.build.id)){
                 prevBuild.add(t.build);
             }
@@ -121,8 +140,26 @@ public class Build{
             return false;
         }
 
-        if(state.teams.eachEnemyCore(team, core -> Mathf.dst(x * tilesize + type.offset, y * tilesize + type.offset, core.x, core.y) < state.rules.enemyCoreBuildRadius + type.size * tilesize / 2f)){
-            return false;
+        if(!state.rules.editor){
+            //find closest core, if it doesn't match the team, placing is not legal
+            if(state.rules.polygonCoreProtection){
+                float mindst = Float.MAX_VALUE;
+                CoreBuild closest = null;
+                for(TeamData data : state.teams.active){
+                    for(CoreBuild tile : data.cores){
+                        float dst = tile.dst2(x * tilesize + type.offset, y * tilesize + type.offset);
+                        if(dst < mindst){
+                            closest = tile;
+                            mindst = dst;
+                        }
+                    }
+                }
+                if(closest != null && closest.team != team){
+                    return false;
+                }
+            }else if(state.teams.eachEnemyCore(team, core -> Mathf.dst(x * tilesize + type.offset, y * tilesize + type.offset, core.x, core.y) < state.rules.enemyCoreBuildRadius + type.size * tilesize / 2f)){
+                return false;
+            }
         }
 
         Tile tile = world.tile(x, y);
@@ -163,7 +200,7 @@ public class Build{
                         //this could be buggy and abuse-able, so I'm not enabling it yet
                         //note that this requires a change in BuilderComp as well
                         //(type == check.block() && check.centerX() == x && check.centerY() == y && check.build != null && check.build.health < check.build.maxHealth - 0.0001f) ||
-                        (check.build instanceof ConstructBuild build && build.cblock == type && check.centerX() == tile.x && check.centerY() == tile.y)) && //same type in construction
+                        (check.build instanceof ConstructBuild build && build.current == type && check.centerX() == tile.x && check.centerY() == tile.y)) && //same type in construction
                     type.bounds(tile.x, tile.y, Tmp.r1).grow(0.01f).contains(check.block.bounds(check.centerX(), check.centerY(), Tmp.r2))) || //no replacement
                 (type.requiresWater && check.floor().liquidDrop != Liquids.water) //requires water but none found
                 ) return false;

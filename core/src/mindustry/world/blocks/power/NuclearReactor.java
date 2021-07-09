@@ -30,6 +30,7 @@ public class NuclearReactor extends PowerGenerator{
     public Color lightColor = Color.valueOf("7f19ea");
     public Color coolColor = new Color(1, 1, 1, 0f);
     public Color hotColor = Color.valueOf("ff9575a3");
+    public Effect explodeEffect = Fx.reactorExplosion;
     /** ticks to consume 1 fuel */
     public float itemDuration = 120;
     /** heating per frame * fullness */
@@ -70,6 +71,14 @@ public class NuclearReactor extends PowerGenerator{
     public void setBars(){
         super.setBars();
         bars.add("heat", (NuclearReactorBuild entity) -> new Bar("bar.heat", Pal.lightOrange, () -> entity.heat));
+    }
+
+    @Override
+    public void drawPlace(int x, int y, int rotation, boolean valid) {
+        super.drawPlace(x, y, rotation, valid);
+        Drawf.dashCircle(x * tilesize + offset, y * tilesize + offset, explosionRadius * tilesize, Color.coral);
+        if (ui.join.lastHost != null && ui.join.lastHost.name.toLowerCase().contains("nydus")) // Only relevant on nydus
+            Drawf.dashCircle(x * tilesize + offset, y * tilesize + offset, explosionRadius / 2f * tilesize, Pal.lightishOrange);
     }
 
     public class NuclearReactorBuild extends GeneratorBuild{
@@ -135,26 +144,9 @@ public class NuclearReactor extends PowerGenerator{
             if((fuel < 5 && heat < 0.5f) || !state.rules.reactorExplosions) return;
 
             Effect.shake(6f, 16f, x, y);
-            Fx.nuclearShockwave.at(x, y);
-            for(int i = 0; i < 6; i++){
-                Time.run(Mathf.random(40), () -> Fx.nuclearcloud.at(x, y));
-            }
-
             Damage.damage(x, y, explosionRadius * tilesize, explosionDamage * 4);
 
-            for(int i = 0; i < 20; i++){
-                Time.run(Mathf.random(50), () -> {
-                    tr.rnd(Mathf.random(40f));
-                    Fx.explosion.at(tr.x + x, tr.y + y);
-                });
-            }
-
-            for(int i = 0; i < 70; i++){
-                Time.run(Mathf.random(80), () -> {
-                    tr.rnd(Mathf.random(120f));
-                    Fx.nuclearsmoke.at(tr.x + x, tr.y + y);
-                });
-            }
+            explodeEffect.at(x, y);
         }
 
         @Override
