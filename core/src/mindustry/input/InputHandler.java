@@ -831,12 +831,10 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             }
         }
 
-        if (!net.client()) { // Client's can't see these in vanilla, editing them desyncs
-            for (BlockPlan req : player.team().data().blocks) {
-                Block block = content.block(req.block);
-                if (block.bounds(req.x, req.y, Tmp.r2).overlaps(Tmp.r1)) {
-                    drawSelected(req.x, req.y, content.block(req.block), Pal.remove);
-                }
+        for (BlockPlan req : player.team().data().blocks) {
+            Block block = content.block(req.block);
+            if (block.bounds(req.x, req.y, Tmp.r2).overlaps(Tmp.r1)) {
+                drawSelected(req.x, req.y, content.block(req.block), Pal.remove);
             }
         }
 
@@ -967,14 +965,12 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
         //remove blocks to rebuild
         Iterator<BlockPlan> broken = player.team().data().blocks.iterator();
-        if (!net.client()) { // Clients can't see these in vanilla, editing them desyncs
-            while (broken.hasNext()) {
-                BlockPlan req = broken.next();
-                Block block = content.block(req.block);
-                if (block.bounds(req.x, req.y, Tmp.r2).overlaps(Tmp.r1)){
-                    removed.add(Point2.pack(req.x, req.y));
-                    broken.remove();
-                }
+        while (broken.hasNext()) {
+            BlockPlan req = broken.next();
+            Block block = content.block(req.block);
+            if (block.bounds(req.x, req.y, Tmp.r2).overlaps(Tmp.r1)){
+                removed.add(Point2.pack(req.x, req.y));
+                broken.remove();
             }
         }
 
@@ -1161,9 +1157,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     }
 
     public @Nullable Unit selectedUnit(boolean allowPlayers){
-        if (ClientVars.hidingUnits) return null;
         Unit unit = Units.closest(player.team(), Core.input.mouseWorld().x, Core.input.mouseWorld().y, input.shift() ? 100f : 40f, allowPlayers ? u -> true : Unitc::isAI);
-        if(unit != null){
+        if(unit != null && !ClientVars.hidingUnits){
             unit.hitbox(Tmp.r1);
             Tmp.r1.grow(input.shift() ? tilesize * 6 : 6f ); // If shift is held, add 3 tiles of leeway, makes it easier to shift click units controlled by processors and such
             if(Tmp.r1.contains(Core.input.mouseWorld())){
@@ -1335,12 +1330,14 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             diagonal = !diagonal;
         }
 
+        int endRotation = -1;
         if(diagonal){
             var start = world.build(startX, startY);
             var end = world.build(endX, endY);
             if(block != null && start instanceof ChainedBuilding && end instanceof ChainedBuilding
                     && block.canReplace(end.block) && block.canReplace(start.block)){
                 points = Placement.upgradeLine(startX, startY, endX, endY);
+                endRotation = end.rotation;
             }else{
                 points = Placement.pathfindLine(block != null && block.conveyorPlacement, startX, startY, endX, endY);
             }
@@ -1374,6 +1371,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                 int result = baseRotation;
                 if(next != null){
                     result = Tile.relativeTo(point.x, point.y, next.x, next.y);
+                }else if(endRotation != -1){
+                    result = endRotation;
                 }else if(block.conveyorPlacement && i > 0){
                     Point2 prev = points.get(i - 1);
                     result = Tile.relativeTo(prev.x, prev.y, point.x, point.y);

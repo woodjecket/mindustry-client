@@ -20,6 +20,9 @@ public class MinePath extends Path {
         items = player.team().data().mineItems;
     }
 
+    public MinePath(Seq<Item> mineItems) {
+        items = mineItems;
+    }
     public MinePath (String args){
         for (String arg : args.split("\\s")) {
             arg = arg.toLowerCase();
@@ -43,7 +46,7 @@ public class MinePath extends Path {
             player.sendMessage(Core.bundle.get("client.path.miner.allinvalid"));
             items = player.team().data().mineItems;
         } else {
-            player.sendMessage(Core.bundle.format("client.path.miner.mining", itemString.substring(0, itemString.length() - 2))); // TODO: Terrible
+            player.sendMessage(Core.bundle.format("client.path.miner.mining", itemString.substring(0, itemString.length() - 2))); // FINISHME: Terrible
         }
     }
 
@@ -64,8 +67,10 @@ public class MinePath extends Path {
         Item item = items.min(i -> indexer.hasOre(i) && player.unit().canMine(i), i -> core.items.get(i));
         if (item == null) return;
 
+        if (Core.settings.getInt("minepathcap") != 0 && core.items.get(item) > Core.settings.getInt("minepathcap")) Navigation.follow(new BuildPath(items)); // Start building when the core has over 1000 of everything.
+
         if (player.unit().maxAccepted(item) == 0) { // drop off
-            if (player.within(core, itemTransferRange - tilesize) && timer.get(30)) {
+            if (player.within(core, itemTransferRange - tilesize * 2) && timer.get(30)) {
                 Call.transferInventory(player, core);
             } else {
                 if (player.unit().type.canBoost) player.boosting = true;
@@ -77,7 +82,7 @@ public class MinePath extends Path {
             player.unit().mineTile = tile;
             if (tile == null) return;
 
-            player.boosting = player.unit().type.canBoost && !player.within(tile, tilesize * 2); // TODO: Distance based on formation radius rather than just moving super close
+            player.boosting = player.unit().type.canBoost && !player.within(tile, tilesize * 2); // FINISHME: Distance based on formation radius rather than just moving super close
             new PositionWaypoint(tile.getX(), tile.getY(), tilesize, tilesize).run();
         }
     }

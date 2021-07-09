@@ -12,16 +12,15 @@ import arc.util.*;
 import mindustry.client.*;
 import mindustry.content.*;
 import mindustry.game.EventType.*;
-import mindustry.game.Team;
+import mindustry.game.*;
 import mindustry.game.Teams.*;
 import mindustry.gen.*;
-import mindustry.ui.*;
 import mindustry.world.*;
 import mindustry.world.blocks.power.*;
 
 import static arc.Core.*;
 import static mindustry.Vars.*;
-import static mindustry.client.navigation.Navigation.obstacles;
+import static mindustry.client.navigation.Navigation.*;
 
 public class BlockRenderer{
     public static final int crackRegions = 8, maxCrackSize = 9;
@@ -169,6 +168,7 @@ public class BlockRenderer{
 
             darkEvents.each(pos -> {
                 var tile = world.tile(pos);
+                if(tile == null) return;
                 float darkness = world.getDarkness(tile.x, tile.y);
                 //then draw the shadow
                 Draw.colorl(darkness <= 0f ? 1f : 1f - Math.min((darkness + 0.5f) / 4f, 1f));

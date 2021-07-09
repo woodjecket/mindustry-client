@@ -8,10 +8,11 @@ import mindustry.client.navigation.*
 import mindustry.client.ui.*
 import mindustry.client.utils.*
 import mindustry.game.*
+import mindustry.gen.*
 
 /** WIP client logic class, similar to [mindustry.core.Logic] but for the client.
  * Handles various events and such.
- * FIXME: Move the 9000 different bits of code throughout the client to here */
+ * FINISHME: Move the 9000 different bits of code throughout the client to here */
 class ClientLogic {
     /** Create event listeners */
     init {
@@ -52,7 +53,17 @@ class ClientLogic {
 
             Navigation.navigator.init()
 
-            Core.settings.getBoolOnce("client730") { Core.settings.put("disablemonofont", true) } // TODO: Remove later
+            Core.settings.getBoolOnce("client730") { Core.settings.put("disablemonofont", true) } // FINISHME: Remove later
+
+            if (Main.messageCrypto.base64public() == "wnnWJvq5c60ryrYndufA5i6JVZcHijLoCHMDsnHPVx76jmfThaX+pxnAAGID6l9jVbFefC6tq8SFsBE5mGU0LQ==") { // People spam these and its annoying
+                Client.register("poli", "Spelling is hard. This will make sure you never forget how to spell the plural of poly, you're welcome.") { _, _ ->
+                    Call.sendChatMessage("Unlike a roly-poly whose plural is roly-polies, the plural form of poly is polys. Please remember this, thanks! :)")
+                }
+
+                Client.register("silicone", "Spelling is hard. This will make sure you never forget how to spell silicon, you're welcome.") { _, _ ->
+                    Call.sendChatMessage("\"In short, silicon is a naturally occurring chemical element, whereas silicone is a synthetic substance.\" They are not the same, please get it right!")
+                }
+            }
         }
 
         Events.on(EventType.PlayerJoin::class.java) { e -> // Run when a player joins the server

@@ -13,10 +13,13 @@ import mindustry.entities.units.*;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.net.*;
+import mindustry.type.*;
 import mindustry.world.*;
 import mindustry.world.blocks.*;
 import mindustry.world.blocks.environment.*;
 import mindustry.world.blocks.logic.*;
+
+import java.util.concurrent.atomic.*;
 
 import static mindustry.Vars.*;
 
@@ -27,14 +30,23 @@ public class BuildPath extends Path {
     public Queue<BuildPlan> broken = new Queue<>(), boulders = new Queue<>(), assist = new Queue<>(), unfinished = new Queue<>(), cleanup = new Queue<>(), networkAssist = new Queue<>(), virus = new Queue<>(), drills = new Queue<>(), belts = new Queue<>();
     public Seq<Queue<BuildPlan>> queues = new Seq<>(11);
     public Seq<BuildPlan> sorted = new Seq<>();
+    private Seq<Item> mineItems;
+    GridBits blocked = new GridBits(world.width(), world.height());
+    int radius = Core.settings.getInt("defaultbuildpathradius");
+    Position origin = player;
 
     @SuppressWarnings("unchecked")
-    public BuildPath(){
+    public BuildPath() {
         queues.addAll(player.unit().plans, broken, assist, unfinished, networkAssist, drills, belts); // Most queues included by default
     }
 
+    public BuildPath(Seq<Item> mineItems) {
+        this();
+        this.mineItems = mineItems;
+    }
+
     @SuppressWarnings("unchecked")
-    public BuildPath(String args){
+    public BuildPath(String args) {
         for (String arg : args.split("\\s")) {
             switch (arg) {
                 case "all", "*" -> queues.addAll(player.unit().plans, broken, assist, unfinished, networkAssist, drills, belts);
@@ -46,9 +58,12 @@ public class BuildPath extends Path {
                 case "cleanup", "derelict", "clean" -> queues.add(cleanup);
                 case "networkassist", "na", "network" -> queues.add(networkAssist);
                 case "virus" -> queues.add(virus); // Intentionally undocumented due to potential false positives
-                case "drills" -> queues.add(drills);
+                case "drills", "mines", "mine", "drill" -> queues.add(drills);
                 case "belts", "conveyors", "conduits", "pipes", "ducts", "tubes" -> queues.add(belts);
-                default -> ui.chatfrag.addMessage(Core.bundle.format("client.path.builder.invalid", arg), null);
+                default -> {
+                    if (Strings.canParsePositiveInt(arg)) radius = Strings.parsePositiveInt(arg);
+                    else ui.chatfrag.addMessage(Core.bundle.format("client.path.builder.invalid", arg), null);
+                }
             }
         }
         if (queues.isEmpty()) {
@@ -75,6 +90,27 @@ public class BuildPath extends Path {
     @Override @SuppressWarnings("unchecked rawtypes") // Java sucks so warnings must be suppressed
     public void follow() {
         if (timer.get(15)) {
+            if (mineItems != null) {
+                Item item = mineItems.min(i -> indexer.hasOre(i) && player.unit().canMine(i), i -> core.items.get(i));
+                if (item != null && core.items.get(item) <= Core.settings.getInt("minepathcap") / 2) Navigation.follow(new MinePath(mineItems));
+            }
+
+            if (timer.get(1, 300)) {
+                blocked.clear();
+                for (var turret : Navigation.obstacles) {
+                    int lowerXBound = (int)(turret.x - turret.radius) / tilesize;
+                    int upperXBound = (int)(turret.x + turret.radius) / tilesize;
+                    int lowerYBound = (int)(turret.y - turret.radius) / tilesize;
+                    int upperYBound = (int)(turret.y + turret.radius) / tilesize;
+                    for (int x = lowerXBound ; x <= upperXBound; x++) {
+                        for (int y = lowerYBound ; y <= upperYBound; y++) {
+                            if (Structs.inBounds(x, y, world.width(), world.width()) && turret.contains(x * tilesize, y * tilesize)) {
+                                blocked.set(x, y);
+                            }
+                        }
+                    }
+                }
+            }
             clearQueue(broken);
             clearQueue(boulders);
             clearQueue(assist);
@@ -145,11 +181,8 @@ public class BuildPath extends Path {
             sort:
             for (int i = 0; i < 2; i++) {
                 for (Queue queue : queues) {
-                    PQueue<BuildPlan> plans = sortPlans(queue, all, false); // TODO: should large first always be false or should it stay as all?
+                    PQueue<BuildPlan> plans = sortPlans(queue, all, false);
                     if (plans.empty()) continue;
-                    /* TODO: This doesn't work lol
-                    plans.forEach(plan -> Navigation.obstacles.forEach(obstacle -> {if(Mathf.dstm(obstacle.x, obstacle.y, plan.x, plan.y) <= obstacle.range){plans.remove(plan);player.unit().plans.remove(plan);}}));
-                    if (plans.isEmpty()) continue; */
                     i = 0;
                     BuildPlan plan;
                     Queue<BuildPlan> scuffed = new Queue<>(player.unit().plans.size);
@@ -216,13 +249,18 @@ public class BuildPath extends Path {
     }
 
     /** @param includeAll whether to include unaffordable plans (appended to end of affordable ones)
-     @param largeFirst reverses the order of outputs, returning the furthest plans first
-     @return {@link Queue<BuildPlan>} sorted by distance */
+        @param largeFirst reverses the order of outputs, returning the furthest plans first
+        @return {@link Queue<BuildPlan>} sorted by distance */
     public PQueue<BuildPlan> sortPlans(Queue<BuildPlan> plans, boolean includeAll, boolean largeFirst) {
         if (plans == null) return null;
         PQueue<BuildPlan> s2 = new PQueue<>(plans.size, Structs.comps(Structs.comparingBool(plan -> plan.block != null && player.unit().shouldSkip(plan, core)), Structs.comparingFloat(plan -> plan.dst(player))));
         plans.each(plan -> {
-            if (includeAll || (plan.block != null && !player.unit().shouldSkip(plan, core))) s2.add(plan);
+            AtomicBoolean dumb = new AtomicBoolean(false);
+            plan.tile().getLinkedTilesAs(plan.block, t -> {
+                if (blocked.get(t.x, t.y)) dumb.set(true);
+            });
+            Log.info(radius);
+            if ((radius == 0 || plan.dst(origin) < radius * tilesize) && !dumb.get() && (includeAll || (plan.block != null && !player.unit().shouldSkip(plan, core))) && validPlan(plan)) s2.add(plan);
         });
         if (largeFirst) s2.comparator = s2.comparator.reversed();
         return s2;
