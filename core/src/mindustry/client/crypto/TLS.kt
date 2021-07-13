@@ -33,6 +33,7 @@ import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketException
+import java.nio.charset.StandardCharsets
 import java.security.*
 import java.security.cert.X509Certificate
 import java.util.*
@@ -130,11 +131,11 @@ object TLS {
 
         protected fun initializeIO() {
             // cancer
-            writer = PrintWriter(socket!!.getOutputStream(), true)
+            writer = PrintWriter(socket!!.getOutputStream(), true, StandardCharsets.UTF_8)
 
             // more cancer
             job = Main.mainScope.launch(Dispatchers.IO) {
-                val input = BufferedReader(InputStreamReader(socket!!.inputStream))
+                val input = BufferedReader(InputStreamReader(socket!!.inputStream, StandardCharsets.UTF_8))
                 while (true) {
                     try {
                         val item = input.readLine().base32678() ?: continue
