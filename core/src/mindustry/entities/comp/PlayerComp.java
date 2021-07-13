@@ -57,6 +57,7 @@ abstract class PlayerComp implements UnitController, Entityc, Syncc, Timerc, Dra
     transient @Nullable Unit justSwitchFrom, justSwitchTo;
     transient boolean fooUser;
     transient boolean assisting;
+    transient @Nullable TraceInfo trace;
 
     public boolean isBuilder(){
         return unit.canBuild();
@@ -239,7 +240,7 @@ abstract class PlayerComp implements UnitController, Entityc, Syncc, Timerc, Dra
     }
 
     /** Somewhat scuffed way to persist buildplans when dying and swapping units. */
-    public void persistPlans() { // TODO: Should this be disabled while running BuildPath?
+    public void persistPlans() { // FINISHME: Should this be disabled while running BuildPath?
         if (!persistPlans.isEmpty() || unit.plans.isEmpty()) return;
         if (Navigation.currentlyFollowing instanceof BuildPath path) path.queues.each(path::clearQueue);
         unit.plans.each(persistPlans::add);
@@ -263,6 +264,10 @@ abstract class PlayerComp implements UnitController, Entityc, Syncc, Timerc, Dra
 
     void kick(KickReason reason){
         con.kick(reason);
+    }
+
+    void kick(KickReason reason, long duration){
+        con.kick(reason, duration);
     }
 
     void kick(String reason){

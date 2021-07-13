@@ -87,13 +87,13 @@ public class PlayerListFragment extends Fragment{
         Groups.player.copy(players);
 
         players.sort(Structs.comps(Structs.comparing(Player::team), Structs.comps(Structs.comparingBool(p -> !p.admin), Structs.comparingBool(p -> !p.fooUser))));
+        if(sField.getText().length() > 0) players.filter(p -> Strings.stripColors(p.name().toLowerCase()).contains(sField.getText().toLowerCase()));
 
         for(var user : players){
             found = true;
             NetConnection connection = user.con;
 
-            if(connection == null && net.server() && !user.isLocal()) continue;
-            if(sField.getText().length() > 0 && !user.name().toLowerCase().contains(sField.getText().toLowerCase()) && !Strings.stripColors(user.name().toLowerCase()).contains(sField.getText().toLowerCase())) continue;
+            if(connection == null && net.server() && !user.isLocal()) return;
 
             Table button = new Table();
             button.left();
@@ -159,7 +159,10 @@ public class PlayerListFragment extends Fragment{
                         .touchable(() -> net.client() ? Touchable.disabled : Touchable.enabled)
                         .checked(user.admin);
 
-                    t.button(Icon.zoom, Styles.clearPartiali, () -> Call.adminRequest(user, AdminAction.trace));
+                    t.button(Icon.zoom, Styles.clearPartiali, () -> {
+                        ClientVars.silentTrace = false;
+                        Call.adminRequest(user, AdminAction.trace);
+                    });
 
                 }).padRight(12).size(bs + 10f, bs);
             }else if(!user.isLocal() && !user.admin && net.client() && Groups.player.size() >= 3 && player.team() == user.team()){ //votekick

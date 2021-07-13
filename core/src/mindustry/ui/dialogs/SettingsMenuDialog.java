@@ -7,6 +7,7 @@ import arc.graphics.*;
 import arc.graphics.Texture.*;
 import arc.input.*;
 import arc.math.*;
+import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.*;
 import arc.scene.ui.layout.*;
@@ -73,11 +74,6 @@ public class SettingsMenuDialog extends Dialog{
                 client.rebuild();
                 updateScrollFocus();
             }
-        });
-
-        released(() -> { // TODO: What does this do again?
-            if(scene.getKeyboardFocus() != this) return;
-            client.rebuild();
         });
 
         setFillParent(true);
@@ -342,7 +338,7 @@ public class SettingsMenuDialog extends Dialog{
 
         client.category("misc");
         client.updatePref();
-        client.sliderPref("minepathcap", 1000, 0, 5000, 100, s -> s == 0 ? "Unlimited" : String.valueOf(s));
+        client.sliderPref("minepathcap", 0, 0, 5000, 100, s -> s == 0 ? "Unlimited" : String.valueOf(s));
         client.sliderPref("defaultbuildpathradius", 0, 0, 250, 5, s -> s == 0 ? "Unlimited" : String.valueOf(s));
         client.checkPref("autoupdate", true);
         client.checkPref("discordrpc", true, i -> platform.toggleDiscord(i));
@@ -354,7 +350,7 @@ public class SettingsMenuDialog extends Dialog{
         // End Client Settings
 
 
-        game.screenshakePref();
+        game.sliderPref("saveinterval", 60, 10, 5 * 120, 10, i -> Core.bundle.format("setting.seconds", i));
         if(mobile){
             game.checkPref("autotarget", true);
             game.checkPref("keyboard", false, val -> {
@@ -375,7 +371,6 @@ public class SettingsMenuDialog extends Dialog{
                 control.setInput(new MobileInput());
             }
         }*/
-        game.sliderPref("saveinterval", 60, 10, 5 * 120, 10, i -> Core.bundle.format("setting.seconds", i));
 
         if(!mobile){
             game.checkPref("crashreport", true);
@@ -414,6 +409,8 @@ public class SettingsMenuDialog extends Dialog{
             Core.settings.put("uiscalechanged", s != lastUiScale[0]);
             return s + "%";
         });
+
+        graphics.sliderPref("screenshake", 4, 0, 8, i -> (i / 4f) + "x");
         graphics.sliderPref("fpscap", 240, 15, 245, 5, s -> (s > 240 ? Core.bundle.get("setting.fpscap.none") : Core.bundle.format("setting.fpscap.text", s)));
         graphics.sliderPref("chatopacity", 100, 0, 100, 5, s -> s + "%");
         graphics.sliderPref("lasersopacity", 100, 0, 100, 5, s -> {
@@ -567,13 +564,13 @@ public class SettingsMenuDialog extends Dialog{
                             });
                         }).update(u -> u.setChecked(becontrol.isUpdateAvailable() || urlChanged)).padRight(4);
                         Label label = new Label(title);
-                        t.add(label).minWidth(label.getPrefWidth() / Scl.scl(1.0F) + 50.0F);
+                        t.add(label).minWidth(label.getPrefWidth() / Scl.scl(1.0F) + 25.0F);
                         t.field(settings.getString(name), text -> {
                             becontrol.setUpdateAvailable(false); // Set this to false as we don't know if this is even a valid URL.
                             urlChanged = true;
                             settings.put(name, text);
-                        }).growX().get().setMessageText("mindustry-antigrief/mindustry-client-v6");
-                    }).left().fillX().padTop(3).height(32);
+                        }).width(450).get().setMessageText("mindustry-antigrief/mindustry-client");
+                    }).left().expandX().padTop(3).height(32).padBottom(3);
                     table.row();
                 }
             });
@@ -688,10 +685,6 @@ public class SettingsMenuDialog extends Dialog{
         public void pref(Setting setting){
             list.add(setting);
             rebuild();
-        }
-
-        public void screenshakePref(){
-            sliderPref("screenshake", bundle.get("setting.screenshake.name", "Screen Shake"), 4, 0, 8, i -> (i / 4f) + "x");
         }
 
         public SliderSetting sliderPref(String name, String title, int def, int min, int max, StringProcessor s){
@@ -818,22 +811,23 @@ public class SettingsMenuDialog extends Dialog{
                 slider.setValue(settings.getInt(name));
 
                 Label label = new Label(title);
+                Label value = new Label("");
+                label.setStyle(Styles.outlineLabel);
+                label.touchable = Touchable.disabled;
+
                 slider.changed(() -> {
                     settings.put(name, (int)slider.getValue());
-                    label.setText(title + ": " + sp.get((int)slider.getValue()));
+                    value.setText(sp.get((int)slider.getValue()));
                 });
+
+                label.setWrap(true);
 
                 slider.change();
 
                 table.table(t -> {
-                    t.left().defaults().left();
-                    t.add(label).minWidth(label.getPrefWidth() / Scl.scl(1f) + 50);
-                    if(Core.graphics.isPortrait()){
-                        t.row();
-                    }
-                    t.add(slider).width(180);
-                }).left().padTop(3);
-
+                    t.stack(slider, label).width(Math.min(Core.graphics.getWidth() / 1.3f, 600)).pad(5);
+                    t.add(value);
+                }).left().padTop(4).expandX();
                 table.row();
             }
         }

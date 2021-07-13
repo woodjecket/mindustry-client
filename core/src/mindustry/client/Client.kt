@@ -28,6 +28,7 @@ import kotlin.random.Random
 
 object Client {
 
+    val leaves = LeaveLog()
     fun initialize() {
         registerCommands()
         ClientLogic()
@@ -250,6 +251,10 @@ object Client {
                 Core.settings.put("assistdistance", abs(Strings.parseFloat(args[0], 1.5f)))
                 player.sendMessage("[accent]The distance multiplier is now ${Core.settings.getFloat("assistdistance")} (default is 1.5)")
             }
+        }
+
+        register("leaves", "experimental leave logging") { args, player ->
+            leaves.leftList()
         }
     }
 
