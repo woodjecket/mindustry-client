@@ -107,20 +107,27 @@ object Main : ApplicationListener {
                     val cert = keyStorage?.cert() ?: return@addListener
                     val chain = keyStorage?.certChain() ?: return@addListener
 
+                    println("Creating client...")
                     val peer = TLS.TLSClient(key, cert, chain, store.trustStore, communicationSystem.id, senderId)
+                    println("Done")
 
                     mainScope.launch {
                         val start = Instant.now()
+                        println("Creating session...")
                         val session = TLSSession(senderId, peer)
+                        println("Done")
                         tlsListeners(session)
                         tlsSessions.add(session)
+                        println("Waiting for ready...")
                         while (!peer.ready && start.age() in 0..30) {
                             delay(100)
                         }
                         if (start.age() >= 30) {
+                            println("Timeout")
                             tlsSessions.remove(session)
                             return@launch
                         }
+                        println("Ready!")
                     }
                 }
                 is TLSTransmission -> {
@@ -153,7 +160,7 @@ object Main : ApplicationListener {
         // Periodically clear out tlsSessions
         mainScope.launch {
             while (true) {
-                tlsSessions.filter { it.stale }.forEach { it.peer.close(); tlsSessions.remove(it) }
+                tlsSessions.filter { it.stale }.forEach { println("Clearing TLS session"); it.peer.close(); tlsSessions.remove(it) }
                 delay(1000)
             }
         }
@@ -162,11 +169,13 @@ object Main : ApplicationListener {
         mainScope.launch(Dispatchers.IO) {
             while (true) {
                 for (session in tlsSessions) {
+                    val j = launch { delay(100); println("FAILED TO FLUSH") }
                     session.commsClient.update()
                     val bytes = ByteArray(session.peer.input.available())
                     session.peer.input.read(bytes)
                     if (bytes.isEmpty()) continue
                     communicationClient.send(TLSTransmission(session.player, bytes))
+                    j.cancel()
                 }
                 delay(500)
             }
@@ -264,7 +273,9 @@ object Main : ApplicationListener {
     }
 
     suspend fun connectTLS(certificate: X509Certificate) {
+        println("Getting player id...")
         val id = playerIDFromCert(certificate) ?: return
+        println("Got id")
         connectTLS(id, certificate)
     }
 
@@ -275,23 +286,33 @@ object Main : ApplicationListener {
         val cert = keyStorage?.cert() ?: return
         val chain = keyStorage?.certChain() ?: return
 
+        println("Creating server...")
         val peer = TLS.TLSServer(key, cert, chain, store.trustStore, communicationSystem.id, player)
+        println("Created")
 
         val start = Instant.now()
+        println("Creating session...")
         val session = TLSSession(player, peer)
+        println("Created")
         tlsListeners(session)
         tlsSessions.add(session)
+        println("Sending TLS request...")
         communicationClient.send(TLSRequest(player))
         while (!peer.ready && start.age() in 0..30) {
             delay(100)
         }
+        println("Timeout/got connection")
         if (start.age() >= 30) {
             tlsSessions.remove(session)
             return
         }
+        println("Checking peer cert...")
         if (peer.peerCert() != expectedCertificate) {
+            println("Invalid!  Terminating connection")
+            session.peer.close()
             tlsSessions.remove(session)
         }
+        println("Valid connection established!")
     }
 
     private fun tlsListeners(session: TLSSession) {
