@@ -2,10 +2,10 @@ package mindustry.client
 
 import arc.*
 import arc.graphics.*
-import arc.input.KeyCode
+import arc.input.*
 import arc.math.*
 import arc.util.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import mindustry.Vars.*
 import mindustry.client.ClientVars.*
 import mindustry.client.Spectate.spectate
@@ -22,9 +22,9 @@ import mindustry.gen.*
 import mindustry.input.*
 import mindustry.net.*
 import mindustry.world.blocks.power.*
-import java.security.cert.X509Certificate
+import java.security.cert.*
 import kotlin.math.*
-import kotlin.random.Random
+import kotlin.random.*
 
 object Client {
 
@@ -222,7 +222,7 @@ object Client {
             }
         }
 
-        register("e <certname> [message...]") { args: Array<String>, player: Player ->
+        register("e <certname> [message...]") { args, player ->
             Main.mainScope.launch {
                 val name = args.getOrNull(0) ?: return@launch
                 val store = Main.keyStorage ?: return@launch
@@ -239,7 +239,7 @@ object Client {
                 session.commsClient.send(MessageTransmission(args[1]))
                 ui.chatfrag.addMessage(
                     args[1],
-                    "${store.cert()?.readableName} [coral]to [white]${cert.readableName}",  //todo bundle
+                    "${store.cert()?.readableName} [coral]to [white]${cert.readableName}",  // FINISHME: Bundle
                     Color.green.cpy().mul(0.35f)
                 )
             }
