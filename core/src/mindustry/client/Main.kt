@@ -38,7 +38,7 @@ object Main : ApplicationListener {
     private val waitingForCertResponse = mutableListOf<(TLSCertFinder, Int) -> Unit>()
 
     data class TLSSession(val player: Int, val peer: TLS.TLSPeer) {
-        val stale get() = Groups.player?.getByID(player) == null
+        val stale get() = Groups.player?.getByID(player) == null || peer.dead
         val commsClient = Packets.CommunicationClient(peer)
     }
 
@@ -162,13 +162,10 @@ object Main : ApplicationListener {
         mainScope.launch(Dispatchers.IO) {
             while (true) {
                 for (session in tlsSessions) {
-                    print('.')
                     session.commsClient.update()
                     val bytes = ByteArray(session.peer.input.available())
                     session.peer.input.read(bytes)
-                    print('+')
                     if (bytes.isEmpty()) continue
-                    println("Flushing ${bytes.size} bytes")
                     communicationClient.send(TLSTransmission(session.player, bytes))
                 }
                 delay(500)

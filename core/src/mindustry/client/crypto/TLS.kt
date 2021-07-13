@@ -92,6 +92,8 @@ object TLS {
 
         abstract val ready: Boolean
 
+        var dead = false
+
         /** The inner, secured socket. */
         var socket: Socket? = null
             protected set
@@ -140,7 +142,8 @@ object TLS {
                     try {
                         val item = input.readLine().base32678() ?: continue
                         listeners.forEach { it(item, otherId) }
-                    } catch (e: SocketException) {  // socket closed
+                    } catch (e: Exception) {  // socket closed
+                        dead = true
                         break
                     }
                 }
@@ -149,13 +152,18 @@ object TLS {
 
         override fun send(bytes: ByteArray) {
             if (this::writer.isInitialized) {
-                writer.print(bytes.base32678() + "\n")  // shut up
-                writer.flush()  // not using println because of linefeed cursedness
+                try {
+                    writer.print(bytes.base32678() + "\n")  // shut up
+                    writer.flush()  // not using println because of linefeed cursedness
+                } catch (e: Exception) {
+                    dead = true
+                }
             }
         }
 
         override fun close() {
             job.cancel()
+            dead = true
         }
 
         fun peerPrincipal(): X500Principal? {
