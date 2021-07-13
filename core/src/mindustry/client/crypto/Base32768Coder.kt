@@ -35,6 +35,9 @@ object Base32768Coder {
     @Throws(IOException::class)
     fun decode(input: String): ByteArray {
         if (input.length < 4) throw IOException("String does not have length prefix!")
+        if (input.length > 500_000) {
+            println("Mega allocation incoming!")
+        }
         try {
             // Extract length
             val size = input.slice(0 until 4).toCharArray().map { (it - 128).code.toByte() }.toByteArray().int()
