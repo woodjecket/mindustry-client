@@ -14,8 +14,10 @@ import org.bouncycastle.asn1.DERUTF8String
 import org.bouncycastle.asn1.x500.RDN
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x500.style.BCStyle
-import org.bouncycastle.asn1.x509.*
+import org.bouncycastle.asn1.x509.BasicConstraints
 import org.bouncycastle.asn1.x509.Extension
+import org.bouncycastle.asn1.x509.GeneralName
+import org.bouncycastle.asn1.x509.GeneralNames
 import org.bouncycastle.cert.X509CertificateHolder
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils
@@ -23,18 +25,16 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.jcajce.provider.asymmetric.edec.KeyPairGeneratorSpi
 import org.bouncycastle.jce.X509KeyUsage
 import org.bouncycastle.jce.provider.BouncyCastleProvider
-import org.bouncycastle.jsse.BCSSLConnection
 import org.bouncycastle.jsse.BCSSLSocket
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
-import org.bouncycastle.tls.TlsProtocol
 import java.io.*
 import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketException
 import java.security.*
-import java.security.cert.*
+import java.security.cert.X509Certificate
 import java.util.*
 import javax.net.ServerSocketFactory
 import javax.net.SocketFactory
@@ -62,6 +62,24 @@ object TLS {
     /** Generates an Ed25519 keypair for signing. */
     fun ecKeyPair(): KeyPair {
         return KeyPairGeneratorSpi.Ed25519().generateKeyPair()
+    }
+
+    private val signer = Signature.getInstance("ed25519", "BC")
+
+    fun sign(input: ByteArray, key: PrivateKey): ByteArray {
+        return synchronized(signer) {
+            signer.initSign(key)
+            signer.update(input)
+            signer.sign()
+        }
+    }
+
+    fun verify(signature: ByteArray, original: ByteArray, key: X509Certificate): Boolean {
+        return synchronized(signer) {
+            signer.initVerify(key)
+            signer.update(original)
+            signer.verify(signature)
+        }
     }
 
     /**
@@ -131,6 +149,7 @@ object TLS {
         override fun send(bytes: ByteArray) {
             if (this::writer.isInitialized) {
                 writer.print(bytes.base32678() + "\n")  // shut up
+                writer.flush()  // not using println because of linefeed cursedness
             }
         }
 
@@ -340,6 +359,14 @@ fun main() {
     val bouncy = BouncyCastleProvider()
     Security.addProvider(bouncy)
     Security.addProvider(BouncyCastleJsseProvider(bouncy))
+
+//    val key = ecKeyPair()
+//    val cert = generateCert("aaa", key)
+//
+//    val original = Random.nextBytes(123)
+//
+//    val signature = TLS.sign(original, key.private)
+//    if (!TLS.verify(signature, original, cert)) throw AssertionError("didn't work")
 
     val caKey = ecKeyPair()
     val caCert = generateCert("ca", caKey)

@@ -16,6 +16,7 @@ import mindustry.client.utils.*
 import mindustry.entities.units.*
 import mindustry.game.*
 import mindustry.gen.Groups
+import mindustry.gen.Iconc
 import mindustry.input.*
 import org.bouncycastle.asn1.x500.style.BCStyle
 import org.bouncycastle.cert.jcajce.JcaX500NameUtil
@@ -23,6 +24,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
 import java.security.Security
 import java.security.cert.X509Certificate
+import java.time.DateTimeException
 import java.time.Instant
 
 object Main : ApplicationListener {
@@ -58,6 +60,13 @@ object Main : ApplicationListener {
                     keyStorage = KeyStorage(Core.settings.dataDirectory.file(), setting)
                 }
             }
+
+            Events.on(EventType.SendChatMessageEvent::class.java) { event ->
+                val cert = keyStorage?.cert() ?: return@on
+                val key = keyStorage?.key() ?: return@on
+                val time = Instant.now().toEpochMilli()
+                communicationClient.send(SignatureTransmission(TLS.sign(SignatureTransmission.format(event.message.encodeToByteArray(), time, cert.serialNumber), key), time, cert.serialNumber))
+            }
         } else {
             communicationSystem = SwitchableCommunicationSystem(DummyCommunicationSystem(mutableListOf()))
             communicationSystem.init()
@@ -70,11 +79,7 @@ object Main : ApplicationListener {
             dispatchedBuildPlans.clear()
         }
         Events.on(EventType.ServerJoinEvent::class.java) {
-//            if (Groups.build.contains { it is LogicBlock.LogicBuild && it.code.startsWith(ProcessorCommunicationSystem.PREFIX) }) {
-                communicationSystem.activeCommunicationSystem = MessageBlockCommunicationSystem
-//            } else {
-//                communicationSystem.activeCommunicationSystem = MessageBlockCommunicationSystem
-//            }
+            communicationSystem.activeCommunicationSystem = MessageBlockCommunicationSystem
         }
 
         communicationClient.addListener { transmission, senderId ->
@@ -95,6 +100,7 @@ object Main : ApplicationListener {
                 }
                 is TLSRequest -> {
                     if (transmission.destination != communicationSystem.id) return@addListener
+                    println("Got tls request from $senderId")
                     val store = keyStorage ?: return@addListener
 
                     val key = keyStorage?.key() ?: return@addListener
@@ -118,7 +124,9 @@ object Main : ApplicationListener {
                     }
                 }
                 is TLSTransmission -> {
+                    println("${transmission.content.size} byte TLS transmission")
                     if (transmission.destination != communicationSystem.id) return@addListener
+                    println("(for me)")
                     val session = tlsSessions.find { it.player == senderId } ?: return@addListener
                     session.peer.output.write(transmission.content)
                 }
@@ -129,6 +137,14 @@ object Main : ApplicationListener {
                     val cert = keyStorage?.cert() ?: return@addListener
                     if (cert.serialNumber == transmission.serialNum) {
                         communicationClient.send(TLSCertFinder(cert.serialNumber, true))
+                    }
+                }
+                is SignatureTransmission -> {
+                    if (!processSignatureTransmission(transmission)) {  // do it again if it doesn't work the first time
+                        mainScope.launch {
+                            delay(250)
+                            processSignatureTransmission(transmission)
+                        }
                     }
                 }
             }
@@ -146,15 +162,37 @@ object Main : ApplicationListener {
         mainScope.launch(Dispatchers.IO) {
             while (true) {
                 for (session in tlsSessions) {
+                    print('.')
                     session.commsClient.update()
                     val bytes = ByteArray(session.peer.input.available())
                     session.peer.input.read(bytes)
+                    print('+')
                     if (bytes.isEmpty()) continue
+                    println("Flushing ${bytes.size} bytes")
                     communicationClient.send(TLSTransmission(session.player, bytes))
                 }
                 delay(500)
             }
         }
+    }
+
+    /**
+     * @return if it's done and does not need to be called again
+     */
+    private fun processSignatureTransmission(transmission: SignatureTransmission): Boolean {
+        val cert = keyStorage?.cert(transmission.certSN) ?: return true
+        val recentMessages = Vars.ui?.chatfrag?.messages?.toList()?.takeLast(5) ?: return false
+        try { if (Instant.ofEpochMilli(transmission.timeSentMillis).age() > 60) return true } catch (e: DateTimeException) { return true }
+        for (msg in recentMessages) {
+            val formatted = SignatureTransmission.format(msg.message.encodeToByteArray(), transmission.timeSentMillis, transmission.certSN)
+            if (TLS.verify(transmission.signature, formatted, cert)) {
+                msg.sender = cert.readableName + " " + Iconc.ok
+                msg.backgroundColor = Color.green.mul(0.4f)
+                msg.format()
+                return true
+            }
+        }
+        return false
     }
 
     /** Run once per frame. */
@@ -263,6 +301,7 @@ object Main : ApplicationListener {
         session.commsClient.addListener { transmission, _ ->
             when (transmission) {
                 is MessageTransmission -> {
+                    println("Got a transmission over TLS!")
                     val name = JcaX500NameUtil.getX500Name(session.peer.peerPrincipal()).getRDNs(BCStyle.CN).firstOrNull()?.first?.value
                     Vars.ui.chatfrag.addMessage(transmission.content, "$name [coral]to [white]${Vars.player.name}", Color.green.cpy().mul(0.35f))  //todo bundle?
                 }

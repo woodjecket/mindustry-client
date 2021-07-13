@@ -14,8 +14,8 @@ object Packets {
     /** The list of registered types of [Transmission].  Transmissions MUST be registered here before use. */
     private val registeredTransmissionTypes = listOf<RegisteredTransmission<*>>(
         RegisteredTransmission(DummyTransmission::class, ::DummyTransmission),
+        RegisteredTransmission(SignatureTransmission::class, ::SignatureTransmission),
         RegisteredTransmission(DummyTransmission::class, ::DummyTransmission),  //finishme remove in 128
-        RegisteredTransmission(DummyTransmission::class, ::DummyTransmission),
         RegisteredTransmission(BuildQueueTransmission::class, ::BuildQueueTransmission),
         RegisteredTransmission(TLSRequest::class, ::TLSRequest),
         RegisteredTransmission(TLSTransmission::class, ::TLSTransmission),
