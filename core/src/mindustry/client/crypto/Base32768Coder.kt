@@ -3,6 +3,7 @@ package mindustry.client.crypto
 import mindustry.client.crypto.Base32768Coder.BITS
 import mindustry.client.utils.*
 import java.io.IOException
+import java.util.zip.CRC32
 
 /** You've heard of base64, now get ready for... base32768.  Encodes 15 bits of data into each unicode character,
  * which so far has not caused any problems.  If it turns out to break stuff, the [BITS] constant can be changed
@@ -29,25 +30,37 @@ object Base32768Coder {
 
         // Include encoded length as 4 chars each representing 1 byte
         val lengthEncoded = String(input.size.toBytes().map { it.toInt().toChar() + 128 }.toCharArray())
-        return lengthEncoded + out.concatToString()
+
+        val crc = CRC32()
+        crc.update(input)
+        val crcEncoded = String(crc.value.toBytes().map { it.toInt().toChar() + 128 }.toCharArray())
+
+        return lengthEncoded + out.concatToString() + crcEncoded
     }
 
     @Throws(IOException::class)
     fun decode(input: String): ByteArray {
-        if (input.length < 4) throw IOException("String does not have length prefix!")
+        if (input.length < 12) throw IOException("String does not have length prefix and/or checksum!")
         try {
             // Extract length
-            val size = input.slice(0 until 4).toCharArray().map { (it - 128).code.toByte() }.toByteArray().int()
+            val size = input.slice(0 until 4).map { (it - 128).code.toByte() }.toByteArray().int()
+            // Extract checksum
+            val checksum = input.takeLast(8).map { (it - 128).code.toByte() }.toByteArray().long()
             if (size > 50_000_000) throw IOException("Array would be too big!")
             // Create output
             val array = ByteArray(size)
             // Create bit stream leading to output array
             val buffer = RandomAccessOutputStream(array)
 
-            for (c in input.drop(4)) {
+            for ((index, c) in input.withIndex()) {
+                if (index < 4 || index > input.length - 8) continue
                 // Take each char, reverse the transform, and add it to the bit stream
                 buffer.writeBits((c.code - 128), BITS)
             }
+
+            val crc = CRC32()
+            crc.update(array)
+            if (crc.value != checksum) throw IOException("Checksum does not match!")
 
             return array
         } catch (e: Exception) {
