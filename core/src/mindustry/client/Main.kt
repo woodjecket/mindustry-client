@@ -169,13 +169,11 @@ object Main : ApplicationListener {
         mainScope.launch(Dispatchers.IO) {
             while (true) {
                 for (session in tlsSessions) {
-                    val j = launch { delay(100); println("FAILED TO FLUSH") }
                     session.commsClient.update()
                     val bytes = ByteArray(session.peer.input.available())
                     session.peer.input.read(bytes)
                     if (bytes.isEmpty()) continue
                     communicationClient.send(TLSTransmission(session.player, bytes))
-                    j.cancel()
                 }
                 delay(500)
             }
