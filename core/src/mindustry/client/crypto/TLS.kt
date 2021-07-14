@@ -133,7 +133,7 @@ object TLS {
 
         protected fun initializeIO() {
             // cancer
-            writer = PrintWriter(socket!!.getOutputStream(), true, StandardCharsets.UTF_8)
+            writer = PrintWriter(socket!!.getOutputStream().writer(StandardCharsets.UTF_8), true)
 
             // more cancer
             job = Main.mainScope.launch(Dispatchers.IO) {

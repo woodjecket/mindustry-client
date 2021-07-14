@@ -7,11 +7,12 @@ import mindustry.game.*
 import mindustry.gen.*
 import mindustry.net.*
 import mindustry.ui.*
+import java.util.*
 
 // FINISHME: Heavily work in progress leave logs
 // FINISHME: Add a TraceInfo var to the player class
 class LeaveLog {
-    private val left = mutableListOf<Player>() // 100 last people to leave
+    private val left = Collections.synchronizedList(mutableListOf<Player>()) // 100 last people to leave
 
     init {
         Events.on(EventType.PlayerLeave::class.java) { e ->
