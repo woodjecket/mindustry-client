@@ -28,7 +28,7 @@ public class Styles{
     public static Drawable black, black9, black8, black6, black3, black5, none, flatDown, flatOver, accentDrawable;
     public static ButtonStyle defaultb, waveb, modsb;
     public static TextButtonStyle defaultt, squaret, nodet, cleart, discordt, nonet, nonetdef, infot, clearPartialt, clearTogglet, logicTogglet, clearToggleMenut, togglet, transt, fullTogglet, logict;
-    public static ImageButtonStyle defaulti, wavei, nodei, righti, emptyi, emptytogglei, settingtogglei, selecti, logici, geni, colori, accenti, cleari, clearFulli, clearPartiali, clearPartial2i, clearTogglei, clearTransi, clearToggleTransi, clearTogglePartiali;
+    public static ImageButtonStyle defaulti, wavei, nodei, righti, emptyi, emptytogglei, settingtogglei, darki, selecti, logici, geni, colori, accenti, cleari, clearFulli, clearPartiali, clearPartial2i, clearTogglei, clearTransi, clearToggleTransi, clearTogglePartiali;
     public static ScrollPaneStyle defaultPane, horizontalPane, smallPane, nonePane;
     public static KeybindDialog.KeybindDialogStyle defaultKeybindDialog;
     public static SliderStyle defaultSlider;
@@ -238,6 +238,10 @@ public class Styles{
         }};
         settingtogglei = new ImageButtonStyle(){{
             imageCheckedColor = Pal.accent;
+            imageDownColor = Pal.accent;
+            imageUpColor = Color.darkGray;
+        }};
+        darki = new ImageButtonStyle(){{
             imageDownColor = Pal.accent;
             imageUpColor = Color.darkGray;
         }};
