@@ -5,6 +5,7 @@ import arc.graphics.Color
 import arc.math.geom.*
 import arc.struct.*
 import arc.util.Interval
+import com.beust.klaxon.Klaxon
 import kotlinx.coroutines.*
 import mindustry.*
 import mindustry.client.antigrief.*
@@ -36,6 +37,7 @@ object Main : ApplicationListener {
     val mainScope = CoroutineScope(Dispatchers.Default)
     var keyStorage: KeyStorage? = null
     private val waitingForCertResponse = mutableListOf<(TLSCertFinder, Int) -> Unit>()
+    val klaxon = Klaxon()
 
     data class TLSSession(val player: Int, val peer: TLS.TLSPeer) {
         val stale get() = Groups.player?.getByID(player) == null || peer.dead

@@ -1,8 +1,10 @@
 package mindustry.client.crypto
 
+import mindustry.client.Main
 import mindustry.client.crypto.TLS.ecKeyPair
 import mindustry.client.crypto.TLS.generateCert
 import mindustry.client.utils.base64
+import mindustry.client.utils.readableName
 import java.io.File
 import java.math.BigInteger
 import java.security.KeyStore
@@ -13,12 +15,14 @@ import java.security.cert.X509Certificate
 
 class KeyStorage(private val dataDir: File, name: String) {
     val trustStore: KeyStore = KeyStore.getInstance("PKCS12", "BC")
-    val store: KeyStore = KeyStore.getInstance("PKCS12", "BC")
+    val store: KeyStore = KeyStore.getInstance("PKCS12","BC")
     private val password = "abc123"  // maybe fix?
+    private val aliases = mutableListOf<CertAlias>()
 
     companion object {
         const val TRUST_STORE_FILENAME = "trusted"
         const val KEY_STORE_FILENAME = "key"
+        const val CERT_ALIAS_FILENAME = "certAliases"
     }
 
     init {
@@ -41,6 +45,20 @@ class KeyStorage(private val dataDir: File, name: String) {
 
         save()
     }
+
+    fun aliases() = try { Main.klaxon.parseArray<CertAlias>(dataDir.resolve(CERT_ALIAS_FILENAME)) ?: listOf() } catch (e: Exception) { dataDir.resolve(CERT_ALIAS_FILENAME).writeText("[]"); listOf() }
+
+    fun alias(certificate: X509Certificate, name: String?) {
+        aliases.removeAll { it.sn == certificate.serialNumber.toString() }
+        if (name != null) aliases.add(CertAlias(certificate.serialNumber.toString(), name))
+        save()
+    }
+
+    fun trusted() = trustStore.aliases().toList().mapNotNull { trustStore.getCertificate(it) as? X509Certificate }
+
+    fun alias(certificate: X509Certificate) = aliases.find { it.sn == certificate.serialNumber.toString() }
+
+    fun cert(alias: String) = trusted().find { it.readableName == alias || aliases.any { a -> a.sn == it.serialNumber.toString() && a.alias == alias } }
 
     /** Generates a key and certificate (expires in five years), then puts them in [store]. */
     private fun genKey(name: String) {
@@ -76,6 +94,8 @@ class KeyStorage(private val dataDir: File, name: String) {
     fun save() {
         store.store(dataDir.resolve(KEY_STORE_FILENAME).outputStream(), password.toCharArray())
         trustStore.store(dataDir.resolve(TRUST_STORE_FILENAME).outputStream(), null)
+        val f = dataDir.resolve(CERT_ALIAS_FILENAME)
+        f.writeText(Main.klaxon.toJsonString(aliases.toTypedArray()))
     }
 
     fun cert(serialNum: BigInteger): X509Certificate? = store.getCertificate("cert$serialNum") as X509Certificate?
@@ -84,4 +104,6 @@ class KeyStorage(private val dataDir: File, name: String) {
         val factory = CertificateFactory.getInstance("X509")
         return factory.generateCertificate(bytes.inputStream()) as? X509Certificate
     }
+
+    data class CertAlias(val sn: String, val alias: String)
 }

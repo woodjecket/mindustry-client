@@ -37,6 +37,22 @@ class TLSKeyDialog : BaseDialog("@client.keyshare") {
                 regenerate()
             }.padRight(7f)
             table.label(cert.readableName ?: "unknown")
+            table.label(store.alias(cert)?.alias ?: "@client.noalias").right()
+            table.button(Icon.edit, Styles.settingtogglei, 16f) {
+                Vars.ui.showTextInput("@client.alias", "@client.alias", 32, "", false) { inp ->
+                    if (inp.isBlank()) {
+                        store.alias(cert, null)
+                        regenerate()
+                        return@showTextInput
+                    }
+                    if ((store.trusted().any { it.readableName?.equals(inp, true) == true }) || store.aliases().any { it.alias.equals(inp, true) }) {
+                        Vars.ui.showInfoFade("@client.aliastaken")
+                        return@showTextInput
+                    }
+                    store.alias(cert, inp)
+                    regenerate()
+                }
+            }
             keys.row(table)
         }
     }

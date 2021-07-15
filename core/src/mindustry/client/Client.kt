@@ -226,9 +226,7 @@ object Client {
             Main.mainScope.launch {
                 val name = args.getOrNull(0) ?: return@launch
                 val store = Main.keyStorage ?: return@launch
-                val cert = store.trustStore.aliases().toList()
-                    .mapNotNull { store.trustStore.getCertificate(it) as? X509Certificate }
-                    .find { it.readableName == name } ?: return@launch
+                val cert = store.cert(name) ?: return@launch
                 val session = Main.tlsSessions.find { it.peer.peerCert() == cert } ?: run {
                     player.sendMessage("client.connectingtls".bundle())
                     Main.connectTLS(cert)
