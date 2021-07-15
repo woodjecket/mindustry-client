@@ -17,7 +17,7 @@ class KeyStorage(private val dataDir: File, name: String) {
     val trustStore: KeyStore = KeyStore.getInstance("PKCS12", "BC")
     val store: KeyStore = KeyStore.getInstance("PKCS12","BC")
     private val password = "abc123"  // maybe fix?
-    private val aliases = mutableListOf<CertAlias>()
+    private val aliases = aliases().toMutableList()
 
     companion object {
         const val TRUST_STORE_FILENAME = "trusted"
