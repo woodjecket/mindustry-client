@@ -1,17 +1,13 @@
 package mindustry.client.crypto
 
-import mindustry.client.Main
+import mindustry.client.*
 import mindustry.client.crypto.TLS.ecKeyPair
 import mindustry.client.crypto.TLS.generateCert
-import mindustry.client.utils.base64
-import mindustry.client.utils.readableName
-import java.io.File
-import java.math.BigInteger
-import java.security.KeyStore
-import java.security.KeyStoreException
-import java.security.PrivateKey
-import java.security.cert.CertificateFactory
-import java.security.cert.X509Certificate
+import mindustry.client.utils.*
+import java.io.*
+import java.math.*
+import java.security.*
+import java.security.cert.*
 
 class KeyStorage(private val dataDir: File, name: String) {
     val trustStore: KeyStore = KeyStore.getInstance("PKCS12", "BC")
@@ -82,7 +78,9 @@ class KeyStorage(private val dataDir: File, name: String) {
         try {
             trustStore.deleteEntry("cert${certificate.serialNumber}")
             save()
-        } catch (e: KeyStoreException) {}
+        } catch (e: KeyStoreException) {
+            e.printStackTrace()
+        }
     }
 
     fun key(): PrivateKey? = store.getKey("key", password.toCharArray()) as? PrivateKey

@@ -1,25 +1,23 @@
 package mindustry.client.ui
 
-import arc.Core
-import arc.input.KeyCode
-import arc.scene.ui.Dialog
-import arc.scene.ui.TextField
-import arc.scene.ui.layout.Table
-import mindustry.Vars
-import mindustry.client.Main
-import mindustry.client.crypto.KeyStorage
+import arc.*
+import arc.input.*
+import arc.scene.ui.*
+import arc.scene.ui.layout.*
+import mindustry.*
+import mindustry.client.*
+import mindustry.client.crypto.*
 import mindustry.client.utils.*
-import mindustry.gen.Icon
-import mindustry.ui.Styles
-import mindustry.ui.dialogs.BaseDialog
-import org.bouncycastle.asn1.x509.BasicConstraints
-import java.security.cert.CertificateFactory
-import java.security.cert.X509Certificate
+import mindustry.gen.*
+import mindustry.ui.*
+import mindustry.ui.dialogs.*
+import java.security.cert.*
 
 class TLSKeyDialog : BaseDialog("@client.keyshare") {
 
     private val keys = Table()
     private lateinit var importDialog: Dialog
+    private lateinit var aliasDialog: Dialog
 
     init {
         build()
@@ -32,27 +30,43 @@ class TLSKeyDialog : BaseDialog("@client.keyshare") {
         for (key in store.trustStore.aliases()) {
             val table = Table()
             val cert = store.trustStore.getCertificate(key) as X509Certificate
-            table.button(Icon.cancel, Styles.settingtogglei, 16f) {
+            table.button(Icon.cancel, Styles.darki, 16f) {
                 store.untrust(cert)
                 regenerate()
-            }.padRight(7f)
-            table.label(cert.readableName ?: "unknown")
-            table.label(store.alias(cert)?.alias ?: "@client.noalias").right()
-            table.button(Icon.edit, Styles.settingtogglei, 16f) {
-                Vars.ui.showTextInput("@client.alias", "@client.alias", 32, "", false) { inp ->
-                    if (inp.isBlank()) {
-                        store.alias(cert, null)
-                        regenerate()
-                        return@showTextInput
+            }.padRight(20f).tooltip("@save.delete")
+
+            table.button(Icon.edit, Styles.darki, 16f) {
+                aliasDialog = dialog("@client.alias") {
+                    val aliasInput = TextField("")
+                    aliasInput.setFilter { _, c -> c.isLetterOrDigit() }
+                    aliasInput.messageText = "@client.noalias"
+                    cont.row(aliasInput).width(400f)
+
+                    cont.row().table{ ta ->
+                        ta.defaults().width(194f).pad(3f)
+                        ta.button("@ok"){
+                            if (aliasInput.text.isBlank()) {
+                                store.alias(cert, null)
+                                regenerate()
+                                return@button
+                            }
+                            if ((store.trusted().any { it.readableName?.equals(aliasInput.text, true) == true }) || store.aliases().any { it.alias.equals(aliasInput.text, true) }) {
+                                Vars.ui.showInfoFade("@client.aliastaken")
+                                return@button
+                            }
+                            store.alias(cert, aliasInput.text)
+                            regenerate()
+                            hide()
+                        }
+
+                        ta.button("@close") {
+                            hide()
+                        }
                     }
-                    if ((store.trusted().any { it.readableName?.equals(inp, true) == true }) || store.aliases().any { it.alias.equals(inp, true) }) {
-                        Vars.ui.showInfoFade("@client.aliastaken")
-                        return@showTextInput
-                    }
-                    store.alias(cert, inp)
-                    regenerate()
-                }
-            }
+                }.show()
+            }.padRight(10f).tooltip("@client.editcert")
+            table.label(cert.readableName ?: "unknown").padRight(10f)
+            table.label("(${store.alias(cert)?.alias ?: "client.noalias".bundle()})").right()
             keys.row(table)
         }
     }
@@ -123,9 +137,8 @@ class TLSKeyDialog : BaseDialog("@client.keyshare") {
                             hide()
                         }
                     }
-                    addCloseListener()
                 }.show()
-            }.growX().get().label.setWrap(false)
+            }.growX().wrapLabel(false)
 
             t.row()
 
@@ -143,6 +156,7 @@ class TLSKeyDialog : BaseDialog("@client.keyshare") {
         keyDown {
             if(it == KeyCode.escape || it == KeyCode.back){
                 if (this::importDialog.isInitialized && importDialog.isShown) Core.app.post(importDialog::hide) // This game hates being not dumb so this is needed
+                if (this::aliasDialog.isInitialized && aliasDialog.isShown) Core.app.post(aliasDialog::hide) // Same as above
                 else Core.app.post(this::hide)
             }
         }
