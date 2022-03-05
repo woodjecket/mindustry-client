@@ -26,7 +26,7 @@ public class PowerInfo {
             }
         });
         ObjectSet<PowerGraph> graphs = PowerGraph.activeGraphs.select(item -> item != null && item.team == Vars.player.team());
-        found = graphs.asArray().max(g -> g.all.size);
+        found = graphs.toSeq().max(g -> g.all.size);
     }
 
     public static Element getBars(Table power) {

@@ -843,8 +843,6 @@ public class SettingsMenuDialog extends BaseDialog{
             }
         }
 
-
-        /** Since the update pref takes half a page and implementing all this in a non static manner is a pain, I'm leaving it here for now. */
         private void updatePref(){
             settings.defaults("updateurl", "mindustry-antigrief/mindustry-client-v7-builds");
             if (!Version.updateUrl.isEmpty()) settings.put("updateurl", Version.updateUrl); // overwrites updateurl on every boot, shouldn't be a real issue
