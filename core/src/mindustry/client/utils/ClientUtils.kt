@@ -3,6 +3,7 @@
 package mindustry.client.utils
 
 import arc.*
+import arc.graphics.*
 import arc.math.geom.*
 import arc.scene.*
 import arc.scene.ui.*
@@ -10,8 +11,10 @@ import arc.scene.ui.layout.*
 import arc.util.*
 import arc.util.serialization.*
 import mindustry.*
+import mindustry.client.*
 import mindustry.client.communication.*
 import mindustry.core.*
+import mindustry.gen.*
 import mindustry.ui.*
 import mindustry.ui.dialogs.*
 import mindustry.world.*
@@ -20,6 +23,7 @@ import java.nio.*
 import java.security.cert.*
 import java.time.*
 import java.time.temporal.*
+import java.util.*
 import java.util.zip.*
 import kotlin.math.*
 
@@ -49,11 +53,7 @@ fun Temporal.timeSince(other: Temporal, unit: TemporalUnit) = unit.between(this,
 fun Temporal.age(unit: TemporalUnit = ChronoUnit.SECONDS) = abs(this.timeSince(Instant.now(), unit))
 
 /** Adds an element to the table followed by a row. */
-fun <T : Element> Table.row(element: T): Cell<T> {
-    val out = add(element)
-    row()
-    return out
-}
+fun <T : Element> Table.row(element: T): Cell<T> = add(element).also { row() }
 
 inline fun dialog(name: String, style: Dialog.DialogStyle = Styles.defaultDialog, dialog: BaseDialog.() -> Unit): Dialog {
     return BaseDialog(name, style).apply(dialog)
@@ -167,14 +167,14 @@ inline fun circle(x: Int, y: Int, radius: Float, block: (x: Int, y: Int) -> Unit
 
 fun sq(inp: Int) = inp * inp
 
-/** Flips the two values in a [kotlin.Pair] */
-fun <A, B> kotlin.Pair<A, B>.flip() = kotlin.Pair(second, first)
+/** Flips the two values in a [Pair] */
+fun <A, B> Pair<A, B>.flip() = Pair(second, first)
 
-/** Checks equality between two [kotlin.Pair] instances, ignores value order. */
-infix fun <A, B> kotlin.Pair<A, B>.eqFlip(other: kotlin.Pair<A, B>) = this == other || this.flip() == other
+/** Checks equality between two [Pair] instances, ignores value order. */
+infix fun <A, B> Pair<A, B>.eqFlip(other: Pair<A, B>) = this == other || this.flip() == other
 
-/** Checks equality between a [kotlin.Pair] and two other values. */
-fun <A, B> kotlin.Pair<A, B>.eqFlip(a: A, b: B) = this.first == a && this.second == b || this.first == b && this.second == a
+/** Checks equality between a [Pair] and two other values. */
+fun <A, B> Pair<A, B>.eqFlip(a: A, b: B) = this.first == a && this.second == b || this.first == b && this.second == a
 
 fun <T> Iterable<T>.escape(escapement: T, vararg escape: T): List<T> {
     val output = mutableListOf<T>()
@@ -199,7 +199,7 @@ fun <T> Iterable<T>.unescape(escapement: T, vararg escape: T): List<T> {
                 false
             }
             item == escapement -> {
-                false
+                true
             }
             else -> {
                 output.add(item)
@@ -258,3 +258,161 @@ val ByteBuffer.byteArray get() = bytes(int)
 fun ByteBuffer.putInstantSeconds(instant: Instant) { putLong(instant.epochSecond) }
 
 val ByteBuffer.instant get() = long.toInstant()
+
+val Boolean.int get() = if (this) 1 else 0
+
+fun pixmapFromClipboard(): Pixmap? {
+    try {
+        val tkClass = Class.forName("java.awt.Toolkit")
+        val tk = tkClass.getMethod("getDefaultToolkit").invoke(null)
+
+        val clipboard = tkClass.getMethod("getSystemClipboard").invoke(tk)
+        val clipboardClass = Class.forName("java.awt.datatransfer.Clipboard")
+
+        val content = clipboardClass.getMethod("getContents", java.lang.Object::class.java)
+            .invoke(clipboard, null)
+
+        val flavorClass = Class.forName("java.awt.datatransfer.DataFlavor")
+        val transferClass = Class.forName("java.awt.datatransfer.Transferable")
+        val img = transferClass.getMethod("getTransferData", flavorClass)
+            .invoke(content, flavorClass.getField("imageFlavor").get(null))
+
+        val width = img::class.java.getMethod("getWidth").invoke(img) as Int
+        val height = img::class.java.getMethod("getHeight").invoke(img) as Int
+
+        val array = IntArray(width * height)
+
+        img::class.java.getMethod(
+            "getRGB",
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            IntArray::class.java,
+            Int::class.java,
+            Int::class.java
+        ).invoke(img, 0, 0, width, height, array, 0, width)
+
+        val buffer = ByteBuffer.allocateDirect(4 * width * height)
+
+        for (item in array) {
+            buffer.put((item shr 16).toByte())
+            buffer.put((item shr 8).toByte())
+            buffer.put(item.toByte())
+            buffer.put((item shr 24).toByte())
+        }
+
+        return Pixmap(buffer, width, height)
+    } catch (e: Exception) {
+        return null
+    }
+}
+
+inline fun <T : Disposable, V> T.use(lambda: T.() -> V) = lambda().also { this.dispose() }
+
+private val bytes = ByteArrayOutputStream()
+
+fun compressImage(img: Pixmap): ByteArray {
+    try {
+        val imgIO = Class.forName("javax.imageio.ImageIO")
+        val writers =
+            imgIO.getMethod("getImageWritersByFormatName", String::class.java).invoke(null, "jpeg") as Iterator<*>
+        val writer = writers.next()
+        val writerCls = Class.forName("javax.imageio.ImageWriter")
+        bytes.reset()
+        val memCacheOutCls = Class.forName("javax.imageio.stream.MemoryCacheImageOutputStream")
+        val out = memCacheOutCls.getConstructor(OutputStream::class.java).newInstance(bytes)
+        writerCls.getMethod("setOutput", java.lang.Object::class.java).invoke(writer, out)
+
+        val bufImCls = Class.forName("java.awt.image.BufferedImage")
+        val im = bufImCls.getConstructor(Int::class.java, Int::class.java, Int::class.java)
+            .newInstance(img.width, img.height, bufImCls.getField("TYPE_INT_RGB").get(null))
+
+        val imArray = IntArray(img.width * img.height)
+        for (x in 0 until img.width) {
+            for (y in 0 until img.height) {
+                val rgb = img[x, y]
+                imArray[x + (y * img.width)] = (rgb ushr 8) or (rgb shl (32 - 8))
+            }
+        }
+        bufImCls.getMethod(
+            "setRGB",
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            IntArray::class.java,
+            Int::class.java,
+            Int::class.java
+        )
+            .invoke(im, 0, 0, img.width, img.height, imArray, 0, img.width)
+
+        val jpgParamCls = Class.forName("javax.imageio.plugins.jpeg.JPEGImageWriteParam")
+        val param = jpgParamCls.getConstructor(Locale::class.java).newInstance(Locale.US)
+
+        jpgParamCls.getMethod("setCompressionMode", Int::class.java)
+            .invoke(param, Class.forName("javax.imageio.ImageWriteParam").getField("MODE_EXPLICIT").get(null))
+        jpgParamCls.getMethod("setCompressionQuality", Float::class.java).invoke(param, 0.5f)
+
+        val imgTypeSpec = Class.forName("javax.imageio.ImageTypeSpecifier")
+        val paramCls = Class.forName("javax.imageio.ImageWriteParam")
+
+        val defMetadata = writerCls.getMethod("getDefaultImageMetadata", imgTypeSpec, paramCls)
+
+        val renderedImg = Class.forName("java.awt.image.RenderedImage")
+        val spec = imgTypeSpec.getMethod("createFromRenderedImage", renderedImg).invoke(null, im)
+
+        val metadata = defMetadata.invoke(writer, spec, param)
+        val metadataCls = Class.forName("javax.imageio.metadata.IIOMetadata")
+        val iioimgCls = Class.forName("javax.imageio.IIOImage")
+
+        val iioimg = iioimgCls.getConstructor(renderedImg, List::class.java, metadataCls)
+            .newInstance(im, emptyList<Any>(), metadata)
+
+        writerCls.getMethod("write", metadataCls, iioimgCls, paramCls).invoke(writer, metadata, iioimg, param)
+        writerCls.getMethod("dispose").invoke(writer)
+        memCacheOutCls.getMethod("flush").invoke(out)
+
+        return bytes.toByteArray()
+    } catch (e: ClassNotFoundException) {
+        bytes.reset()
+        PixmapIO.PngWriter().use { write(bytes, img) }
+        return bytes.toByteArray()
+    }
+}
+
+fun inflateImage(array: ByteArray, offset: Int, length: Int): Pixmap? {
+    return try { Pixmap(array, offset, length) } catch (e: Exception) { null }
+}
+
+inline fun circle(x: Int, y: Int, radius: Float, cons: (Tile?) -> Unit) {
+    // x^2 + y^2 = r^2
+    // x = sqrt(r^2 - y^2)
+    val tr = radius / Vars.tilesize
+    val r2 = tr * tr
+    val h = 0 until Vars.world.height()
+    val w = 0 until Vars.world.width()
+    for (yo in -tr.floor()..tr.ceil()) {
+        val ty = yo + y
+        if (ty !in h) continue
+        val diff = sqrt(r2 - (yo * yo)).ceil()
+        for (tx in (x - diff)..(x + diff)) {
+            if (tx !in w) continue
+            cons(Vars.world.tiles[tx, ty])
+        }
+    }
+}
+
+/** Send a signed message to chat. */
+fun sendMessage(msg: String) = Call.sendChatMessage(Main.sign(msg))
+
+
+//inline fun <T> Seq<out T>.forEach(consumer: (T?) -> Unit) {
+//    for (i in 0 until size) consumer(items[i])
+//}
+//
+//inline fun <T> Seq<out T>.forEach(pred: (T?) -> Boolean, consumer: (T?) -> Unit) {
+//    for (i in 0 until size) {
+//        if (pred(items[i])) consumer(items[i])
+//    }
+//}

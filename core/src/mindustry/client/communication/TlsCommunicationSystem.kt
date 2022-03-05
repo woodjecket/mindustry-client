@@ -56,7 +56,7 @@ class TlsCommunicationSystem(
         private val escapeChars = arrayOf(KEEPALIVE, CLOSE, DELIMINATOR)
 
         private fun ByteArray.escape() = toList().escape(ESCAPEMENT, *escapeChars).toByteArray()
-        private fun ByteArray.unescape() = toList().unescape(ESCAPEMENT, *escapeChars).toByteArray()
+//        private fun ByteArray.unescape() = toList().unescape(ESCAPEMENT, *escapeChars).toByteArray()
     }
 
     private val incoming = ByteSeq()

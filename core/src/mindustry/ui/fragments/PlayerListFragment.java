@@ -85,7 +85,11 @@ public class PlayerListFragment extends Fragment{
         players.clear();
         Groups.player.copy(players);
 
-        players.sort(Structs.comps(Structs.comparing(Player::team), Structs.comps(Structs.comparingBool(p -> !p.admin), Structs.comparingBool(p -> !(p.fooUser || p.isLocal())))));
+        var target = Spectate.INSTANCE.getPos() instanceof Player p ? p :
+            Navigation.currentlyFollowing instanceof AssistPath p && p.getAssisting() != null ? p.getAssisting() :
+            Navigation.currentlyFollowing instanceof UnAssistPath p ? p.target :
+            null;
+        players.sort(Structs.comps(Structs.comparingBool(p -> p != target), Structs.comps(Structs.comparing(Player::team), Structs.comps(Structs.comparingBool(p -> !p.admin), Structs.comparingBool(p -> !(p.fooUser || p.isLocal()))))));
         if(search.getText().length() > 0) players.filter(p -> Strings.stripColors(p.name().toLowerCase()).contains(search.getText().toLowerCase()));
 
         for(var user : players){
@@ -201,7 +205,7 @@ public class PlayerListFragment extends Fragment{
                 button.button(Icon.move, ustyle, // Goto
                         () -> Navigation.navigateTo(user)).size(h / 2).tooltip("@client.goto");
                 button.button(Icon.zoom, ustyle, // Spectate/stalk
-                        () -> Spectate.INSTANCE.spectate(user)).tooltip("@client.spectate");
+                        () -> Spectate.INSTANCE.spectate(user, Core.input.shift())).tooltip("@client.spectate");
             }
 
             content.add(button).padBottom(-6).width(700).maxHeight(h + 14);

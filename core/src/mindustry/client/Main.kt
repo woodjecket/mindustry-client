@@ -1,7 +1,9 @@
 package mindustry.client
 
 import arc.*
+import arc.graphics.*
 import arc.math.geom.*
+import arc.scene.ui.*
 import arc.struct.*
 import arc.util.*
 import mindustry.*
@@ -53,6 +55,11 @@ object Main : ApplicationListener {
             communicationSystem = SwitchableCommunicationSystem(DummyCommunicationSystem(mutableListOf()))
             communicationSystem.init()
         }
+
+        Core.settings.getBoolOnce("displaydef") {
+            Core.settings.put("displayasuser", true)
+        }
+
         communicationClient = Packets.CommunicationClient(communicationSystem)
 
         Navigation.navigator = AStarNavigator
@@ -61,7 +68,7 @@ object Main : ApplicationListener {
             dispatchedBuildPlans.clear()
         }
         Events.on(EventType.ServerJoinEvent::class.java) {
-                communicationSystem.activeCommunicationSystem = BlockCommunicationSystem
+            communicationSystem.activeCommunicationSystem = BlockCommunicationSystem
         }
 
         communicationClient.addListener { transmission, senderId ->
@@ -116,22 +123,30 @@ object Main : ApplicationListener {
                 is ClientMessageTransmission -> {
                     if (senderId != Vars.player.id) transmission.addToChatfrag()
                 }
+
+                is ImageTransmission -> {
+                    val msg = findMessage(transmission.message) ?: return@addListener
+                    msg.attachments.add(Image(Texture(transmission.image)))
+                }
             }
         }
     }
 
+    private fun findMessage(id: Short): ChatFragment.ChatMessage? {
+        val ending = InvisibleCharCoder.encode(id.toBytes())
+        return Vars.ui.chatfrag.messages.lastOrNull { it.unformatted?.endsWith(ending) == true }
+    }
+
     /** @return if it's done or not, NOT if it's valid */
     private fun check(transmission: SignatureTransmission): Boolean {
-        val ending = InvisibleCharCoder.encode(transmission.messageId.toBytes())
-
         fun invalid(msg: ChatFragment.ChatMessage, cert: X509Certificate?) {
             msg.sender = cert?.run { keyStorage.aliasOrName(this) }?.stripColors()?.plus("[scarlet] impersonator") ?: "Verification failed"
             msg.backgroundColor = ClientVars.invalid
-            msg.prefix = "${Iconc.cancel} "
+            msg.prefix = "${Iconc.cancel} ${msg.prefix} "
             msg.format()
         }
 
-        val msg = Vars.ui.chatfrag.messages.lastOrNull { it.unformatted?.endsWith(ending) == true } ?: return false
+        val msg = findMessage(transmission.messageId) ?: return false
 
         if (!msg.message.endsWith(msg.unformatted)) { invalid(msg, null); Log.debug("Does not end with unformatted!") }
 
@@ -142,7 +157,7 @@ object Main : ApplicationListener {
             Signatures.VerifyResult.VALID -> {
                 msg.sender = output.second?.run { keyStorage.aliasOrName(this) }
                 msg.backgroundColor = ClientVars.verified
-                msg.prefix = "${Iconc.ok} "
+                msg.prefix = "${Iconc.ok} ${msg.prefix} "
                 msg.format()
                 true
             }
@@ -157,14 +172,17 @@ object Main : ApplicationListener {
     }
 
     fun sign(content: String): String {
-        if (!Core.settings.getBool("signmessages")) return content
-        if (content.startsWith("/")) return content
+//        if (!Core.settings.getBool("signmessages")) return content  // ID is also needed for attachments now
+        if (content.startsWith("/") && !(content.startsWith("/t ") || content.startsWith("/a "))) return content
+
         val msgId = Random.nextInt().toShort()
         val contentWithId = content + InvisibleCharCoder.encode(msgId.toBytes())
+
         communicationClient.send(signatures.signatureTransmission(
-            contentWithId.encodeToByteArray(),
+            contentWithId.replace("^/[t|a] ".toRegex(), "").encodeToByteArray(),
             communicationSystem.id,
-            msgId) ?: return content)
+            msgId) ?: return contentWithId)
+
         return contentWithId
     }
 
@@ -221,28 +239,30 @@ object Main : ApplicationListener {
         }
     }
 
-    fun send(transmission: Transmission) {
-        communicationClient.send(transmission)
+    fun send(transmission: Transmission, onFinish: (() -> Unit)? = null) {
+        communicationClient.send(transmission, onFinish)
     }
 
+    /** Uses [Tmp.v1], do not cache returned vec or call this function on non-main thread. */
     fun floatEmbed(): Vec2 {
+        val show = Core.settings.getBool("displayasuser")
         return when {
-            Navigation.currentlyFollowing is AssistPath && Core.settings.getBool("displayasuser") ->
-                Vec2(
+            Navigation.currentlyFollowing is AssistPath && show ->
+                Tmp.v1.set(
                     FloatEmbed.embedInFloat(Vars.player.unit().aimX, ClientVars.FOO_USER),
                     FloatEmbed.embedInFloat(Vars.player.unit().aimY, ClientVars.ASSISTING)
                 )
             Navigation.currentlyFollowing is AssistPath ->
-                Vec2(
+                Tmp.v1.set(
                     FloatEmbed.embedInFloat(Vars.player.unit().aimX, ClientVars.ASSISTING),
                     FloatEmbed.embedInFloat(Vars.player.unit().aimY, ClientVars.ASSISTING)
                 )
-            Core.settings.getBool("displayasuser") ->
-                Vec2(
+            show ->
+                Tmp.v1.set(
                     FloatEmbed.embedInFloat(Vars.player.unit().aimX, ClientVars.FOO_USER),
                     FloatEmbed.embedInFloat(Vars.player.unit().aimY, ClientVars.FOO_USER)
                 )
-            else -> Vec2(Vars.player.unit().aimX, Vars.player.unit().aimY)
+            else -> Tmp.v1.set(Vars.player.unit().aimX, Vars.player.unit().aimY)
         }
     }
 
@@ -279,7 +299,7 @@ object Main : ApplicationListener {
             when (transmission) {
                 is MessageTransmission -> {
                     ClientVars.lastCertName = system.peer.expectedCert.readableName
-                    Vars.ui.chatfrag.addMessage(transmission.content, "[white]" + keyStorage.aliasOrName(system.peer.expectedCert) + "[accent] -> [coral]" + (keyStorage.cert()?.readableName ?: "you"), ClientVars.encrypted).prefix = "${Iconc.ok} "
+                    Vars.ui.chatfrag.addMessage(transmission.content, "[white]" + keyStorage.aliasOrName(system.peer.expectedCert) + "[accent] -> [coral]" + (keyStorage.cert()?.readableName ?: "you"), ClientVars.encrypted).run{ prefix = "${Iconc.ok} $prefix " }
                 }
 
                 is CommandTransmission -> {

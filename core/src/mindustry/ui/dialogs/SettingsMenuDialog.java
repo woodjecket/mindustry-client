@@ -310,7 +310,7 @@ public class SettingsMenuDialog extends BaseDialog{
         client.checkPref("signmessages", true);
         client.checkPref("highlightcryptomsg", true);
         client.checkPref("highlightclientmsg", false);
-        client.checkPref("displayasuser", false);
+        client.checkPref("displayasuser", true);
         client.checkPref("broadcastcoreattack", false); // TODO: Multiple people using this setting at once will cause chat spam
         client.checkPref("showuserid", false);
 
@@ -328,14 +328,16 @@ public class SettingsMenuDialog extends BaseDialog{
         client.sliderPref("junctionview", 0, -1, 1, 1, s -> { Junction.setBaseOffset(s); return s == -1 ? "On left side" : s == 1 ? "On right side" : "Do not show"; });
         client.sliderPref("spawntime", 5, -1, 60, s -> { ClientVars.spawnTime = 60 * s; Vars.pathfinder.start(); return s == -1 ? "Solid Line" : s == 0 ? "Disabled" : String.valueOf(s); });
         client.sliderPref("traveltime", 10, 0, 60, s -> { ClientVars.travelTime = 60f / s; return s == 0 ? "Disabled" : String.valueOf(s); });
+        client.sliderPref("formationopacity", 30, 10, 100, 5, s -> { UnitType.formationAlpha = s / 100f; return s + "%"; });
+        client.sliderPref("hitboxopacity", 0, 0, 100, 5, s -> { UnitType.hitboxAlpha = s / 100f; return s == 0 ? "Disabled" : s + "%"; });
         client.checkPref("tilehud", true);
         client.checkPref("lighting", true);
         client.checkPref("disablemonofont", true); // Requires Restart
         client.checkPref("placementfragmentsearch", true);
         client.checkPref("drawwrecks", true);
         client.checkPref("drawallitems", true, i -> UnitType.drawAllItems = i);
+        client.checkPref("drawpath", true);
         client.checkPref("unitranges", false);
-        client.checkPref("drawhitboxes", false);
         client.checkPref("mobileui", false, i -> mobile = !mobile);
         client.checkPref("showreactors", false);
         client.checkPref("showdomes", false);
@@ -359,8 +361,8 @@ public class SettingsMenuDialog extends BaseDialog{
 
 
         game.sliderPref("saveinterval", 60, 10, 5 * 120, 10, i -> Core.bundle.format("setting.seconds", i));
+        game.checkPref("autotarget", false);
         if(mobile){
-            game.checkPref("autotarget", true);
             if(!ios){
                 game.checkPref("keyboard", false, val -> {
                     control.setInput(val ? new DesktopInput() : new MobileInput());

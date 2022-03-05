@@ -1,13 +1,18 @@
 package mindustry.client;
 
 import arc.*;
+import arc.audio.*;
 import arc.graphics.*;
 import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
-import mindustry.client.antigrief.*;
+import mindustry.*;
+import mindustry.content.*;
+import mindustry.type.*;
 import mindustry.world.blocks.defense.*;
 import org.jetbrains.annotations.*;
+
+import java.util.concurrent.*;
 
 public class ClientVars {
     // Misc
@@ -17,8 +22,9 @@ public class ClientVars {
     public static float travelTime = Core.settings.getInt("traveltime");
 
     // Config Queue
-    @NotNull public static Queue<ConfigRequest> configs = new Queue<>();
+    @NotNull public static LinkedBlockingDeque<Runnable> configs = new LinkedBlockingDeque<>(); // Thread safe just in case, contains mostly instances of ConfigRequest.
     @NotNull public static Ratekeeper configRateLimit = new Ratekeeper();
+    public static Sound test = null;
 
     // Hotkeys
     public static boolean showingTurrets, hidingUnits, hidingAirUnits, hidingBlocks, dispatchingBuildPlans, showingOverdrives;

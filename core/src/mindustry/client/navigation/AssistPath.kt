@@ -13,7 +13,7 @@ import mindustry.game.*
 import mindustry.gen.*
 import mindustry.input.*
 
-class AssistPath(val assisting: Player?, val cursor: Boolean = false, val noFollow: Boolean = false) : Path() {
+class AssistPath(val assisting: Player?, private val cursor: Boolean = false, private val noFollow: Boolean = false) : Path() {
     private var show: Boolean = true
     private var plans = Seq<BuildPlan>()
     private var tolerance = 0F
@@ -68,7 +68,7 @@ class AssistPath(val assisting: Player?, val cursor: Boolean = false, val noFoll
         }
 
         if (assisting.isBuilder && player.isBuilder) {
-            if (assisting.unit().activelyBuilding() && assisting.team() == player.team()) {
+            if (assisting.unit().updateBuilding && assisting.team() == player.team()) {
                 plans.forEach { player.unit().removeBuild(it.x, it.y, it.breaking) }
                 plans.clear()
                 for (plan in assisting.unit().plans) {
@@ -114,9 +114,9 @@ class AssistPath(val assisting: Player?, val cursor: Boolean = false, val noFoll
 
     override fun draw() {
         assisting ?: return
-        if (player.dst(if (cursor) Tmp.v1.set(assisting.mouseX, assisting.mouseY) else assisting) > tolerance + tilesize * 5) waypoints.draw()
+        if (!noFollow && player.dst(if (cursor) Tmp.v1.set(assisting.mouseX, assisting.mouseY) else assisting) > tolerance + tilesize * 5) waypoints.draw()
 
-        if (Spectate.pos != assisting) assisting.unit().drawBuildPlans()
+        if (Spectate.pos != assisting) assisting.unit().drawBuildPlans() // Don't draw plans twice
     }
 
     override fun progress(): Float {

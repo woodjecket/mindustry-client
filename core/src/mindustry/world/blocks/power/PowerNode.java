@@ -360,15 +360,14 @@ public class PowerNode extends PowerBlock{
 
         @Override
         public void placed(){
-            if(net.client()) return;
-
-            getPotentialLinks(tile, team, other -> {
-                if(!power.links.contains(other.pos())){
-                    configureAny(other.pos());
-                }
-            });
-
-            super.placed();
+            if(!net.client()) {
+                getPotentialLinks(tile, team, other -> {
+                    if(!power.links.contains(other.pos())){
+                        configureAny(other.pos());
+                    }
+                });
+                super.placed();
+            }
         }
 
         @Override

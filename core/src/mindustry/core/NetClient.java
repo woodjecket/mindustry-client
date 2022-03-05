@@ -24,6 +24,8 @@ import mindustry.game.EventType.*;
 import mindustry.game.*;
 import mindustry.game.Teams.*;
 import mindustry.gen.*;
+import mindustry.graphics.*;
+import mindustry.io.*;
 import mindustry.logic.*;
 import mindustry.net.Administration.*;
 import mindustry.net.*;
@@ -179,7 +181,7 @@ public class NetClient implements ApplicationListener{
     @Remote(variants = Variant.both, unreliable = true)
     public static void soundAt(Sound sound, float x, float y, float volume, float pitch){
         if(sound == null) return;
-        if(sound == Sounds.corexplode && UtilitiesKt.io()) return;
+        if(sound == Sounds.corexplode && ClientUtilsKt.io()) return;
 
         sound.at(x, y, pitch, Mathf.clamp(volume, 0, 4f));
     }
@@ -207,17 +209,25 @@ public class NetClient implements ApplicationListener{
     public static void sendMessage(String message, @Nullable String unformatted, @Nullable Player playersender){
         Color background = null;
         if(Vars.ui != null){
+            var prefix = "";
+
             if (playersender != null && playersender.fooUser && playersender != player) { // Add wrench to client user messages, highlight if enabled
-                message = Iconc.wrench + " " + message;
+                prefix = Iconc.wrench + " ";
                 if (Core.settings.getBool("highlightclientmsg")) background = ClientVars.user;
             }
 
             unformatted = processCoords(unformatted, true);
             message = processCoords(message, unformatted != null);
             if (playersender != null) {
+                if (message.startsWith("[#" + playersender.team().color.toString() + "]<T>")) {
+                    prefix += "[#" + playersender.team().color.toString() + "]<T> ";
+                }
+                if (message.startsWith("[#" + Pal.adminChat.toString() + "]<A>")) {
+                    prefix += "[#" + Pal.adminChat.toString() + "]<A> ";
+                }
                 var sender = playersender.coloredName();
                 var unformatted2 = unformatted == null ? StringsKt.removePrefix(message, "[" + playersender.coloredName() + "]: ") : unformatted;
-                Vars.ui.chatfrag.addMessage(message, sender, background, "", unformatted2);
+                ui.chatfrag.addMessage(message, sender, background, prefix, unformatted2);
             } else {
                 Vars.ui.chatfrag.addMessage(message, null, unformatted == null ? "" : unformatted);
             }
@@ -255,13 +265,12 @@ public class NetClient implements ApplicationListener{
         if (setLastPos) try {
             ClientVars.lastSentPos.set(Float.parseFloat(matcher.group(1)), Float.parseFloat(matcher.group(2)));
         } catch (NumberFormatException ignored) {}
-        return matcher.replaceFirst("[scarlet]" + Strings.stripColors(matcher.group()) + "[]"); // replaceFirst [scarlet]$0[] fails if $0 begins with a color, stripColors($0) isn't something that works.
+        return matcher.replaceFirst(Matcher.quoteReplacement("[scarlet]" + Strings.stripColors(matcher.group()) + "[]")); // replaceFirst [scarlet]$0[] fails if $0 begins with a color, stripColors($0) isn't something that works.
     }
 
     //called when a server receives a chat message from a player
     @Remote(called = Loc.server, targets = Loc.client)
     public static void sendChatMessage(Player player, String message){
-
         //do not receive chat messages from clients that are too young or not registered
         if(net.server() && player != null && player.con != null && (Time.timeSinceMillis(player.con.connectTime) < 500 || !player.con.hasConnected || !player.isAdded())) return;
 
@@ -611,31 +620,24 @@ public class NetClient implements ApplicationListener{
         return removed.contains(id);
     }
 
+    private final ReusableByteOutStream counter = new ReusableByteOutStream();
+    private final Writes write = new Writes(new DataOutputStream(counter));
     void sync(){
         if(timer.get(0, playerSyncTime)){
             BuildPlan[] requests = null;
             if(player.isBuilder() || player.unit().isBuilding()){
-                //limit to 10 to prevent buffer overflows
-                int usedRequests = Math.min(player.unit().plans().size, 10);
+                int usedRequests = player.unit().plans().size;
 
-                int totalLength = 0;
-
-                //prevent buffer overflow by checking config length
                 for(int i = 0; i < usedRequests; i++){
                     BuildPlan plan = player.unit().plans().get(i);
-                    if(plan.config instanceof byte[] b){
-                        totalLength += b.length;
-                    }
+                    TypeIO.writeRequest(write, plan); // Write plan so we can get the byte length
 
-                    if(plan.config instanceof String b){
-                        totalLength += b.length();
-                    }
-
-                    if(totalLength > 500){
+                    if(counter.size() > 500){ // prevent buffer overflows (large configs / many plans)
                         usedRequests = i + 1;
                         break;
                     }
                 }
+                counter.reset();
 
                 requests = new BuildPlan[usedRequests];
                 for(int i = 0; i < usedRequests; i++){
@@ -645,15 +647,15 @@ public class NetClient implements ApplicationListener{
 
             Unit unit = player.dead() ? Nulls.unit : player.unit();
             int uid = player.dead() ? -1 : unit.id;
-            Vec2 pos = Main.INSTANCE.floatEmbed();
+            Vec2 aimPos = Main.INSTANCE.floatEmbed();
 
             Call.clientSnapshot(
             lastSent++,
             uid,
             player.dead(),
             player.dead() ? player.x : unit.x, player.dead() ? player.y : unit.y,
-            pos.x,
-            pos.y,
+            aimPos.x,
+            aimPos.y,
             unit.rotation,
             unit instanceof Mechc m ? m.baseRotation() : 0,
             unit.vel.x, unit.vel.y,

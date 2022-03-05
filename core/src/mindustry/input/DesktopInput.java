@@ -110,9 +110,6 @@ public class DesktopInput extends InputHandler{
                             str.append("\n").append(bundle.format("schematic.flip", keybinds.get(Binding.schematic_flip_x).key.toString(), keybinds.get(Binding.schematic_flip_y).key.toString()));
                         }
                     }
-                    if(selectRequests.size > 1024){ // Any selection with more than 1024 blocks
-                        str.append("\n").append(bundle.format("client.largeschematic", keybinds.get(Binding.toggle_placement_modifiers).key.toString()));
-                    }
 
                     t.color.a = Mathf.lerpDelta(t.color.a, Mathf.num(showHint.get()), .15f);
                     if (t.color.a > .01f) {
@@ -180,12 +177,13 @@ public class DesktopInput extends InputHandler{
         }
 
         //draw schematic requests
-        selectRequests.each(req -> {
+        for (int i = 0; i < selectRequests.size; i++) {
+            var req = selectRequests.get(i);
+            boolean valid = validPlace(req.x, req.y, req.block, req.rotation);
             req.animScale = 1f;
-            drawRequest(req);
-        });
-
-        selectRequests.each(this::drawOverRequest);
+            drawRequest(req, valid);
+            drawOverRequest(req, valid);
+        }
 
 //        if(player.isBuilder()){
             //draw things that may be placed soon
@@ -193,12 +191,13 @@ public class DesktopInput extends InputHandler{
                 for(int i = 0; i < lineRequests.size; i++){
                     BuildPlan req = lineRequests.get(i);
                     if(req.block == null) continue;
+                    boolean valid = validPlace(req.x, req.y, req.block, req.rotation);
                     if(i == lineRequests.size - 1 && req.block.rotate){
-                        drawArrow(block, req.x, req.y, req.rotation);
+                        drawArrow(block, req.x, req.y, req.rotation, valid);
                     }
-                    drawRequest(req);
+                    drawRequest(req, valid);
+                    drawOverRequest(req, valid);
                 }
-                lineRequests.each(this::drawOverRequest);
             }else if(isPlacing()){
                 if(block.rotate && block.drawArrow){
                     drawArrow(block, cursorX, cursorY, rotation);
@@ -298,12 +297,18 @@ public class DesktopInput extends InputHandler{
             settings.put("assumeunstrict", !settings.getBool("assumeunstrict"));
         }
 
+        if(input.keyTap(Binding.toggle_auto_target) && scene.getKeyboardFocus() == null && selectRequests.isEmpty()){
+            player.shooting = false;
+            settings.put("autotarget", !settings.getBool("autotarget"));
+            new Toast(1).add(bundle.get("setting.autotarget.name") + ": " + bundle.get((settings.getBool("autotarget") ? "mod.enabled" : "mod.disabled")));
+        }
+
         boolean locked = locked();
         boolean panCam = false;
         float camSpeed = (!Core.input.keyDown(Binding.boost) ? panSpeed : panBoostSpeed) * Time.delta;
 
         if(input.keyTap(Binding.navigate_to_camera) && scene.getKeyboardFocus() == null){
-            if(selectRequests.any() == input.shift()) Navigation.navigateTo(input.mouseWorld()); // Z to nav to camera (SHIFT + Z when placing schem)
+            if(selectRequests.any() == input.shift()) Navigation.navigateTo(input.mouseWorld()); // Z to nav to cursor (SHIFT + Z when placing schem)
             else if (selectRequests.isEmpty()){ // SHIFT + Z to view lastSentPos, double tap to nav there, special case for logic viruses as well (does nothing when placing schem)
                 if (Time.timeSinceMillis(lastShiftZ) < 400) Navigation.navigateTo(lastSentPos.cpy().scl(tilesize));
                 else Spectate.INSTANCE.spectate(lastSentPos.cpy().scl(tilesize));
@@ -366,7 +371,7 @@ public class DesktopInput extends InputHandler{
             }
         }
 
-        shouldShoot = !scene.hasMouse() && !locked;
+        shouldShoot = !locked;
         Tile cursor = tileAt(Core.input.mouseX(), Core.input.mouseY());
 
         if(!scene.hasMouse() && !locked){
@@ -431,11 +436,17 @@ public class DesktopInput extends InputHandler{
                 Unit on = selectedUnit(true);
                 var build = selectedControlBuild();
                 if(on != null){
-                    if (input.keyDown(Binding.control) && on.isAI()) Call.unitControl(player, on); // Ctrl + click: control unit
-                    else if ((input.keyDown(Binding.control) || input.shift()) && on.isPlayer()) Navigation.follow(new AssistPath(on.playerNonNull(), input.keyDown(Binding.control), input.alt())); // Shift + click player: quick assist (ctrl + click to follow cursor, shift/ctrl + alt + click to not follow)
-                    else if (on.controller() instanceof LogicAI p && p.controller != null) Spectate.INSTANCE.spectate(p.controller); // Shift + click logic unit: spectate processor
-                    shouldShoot = false;
-                    recentRespawnTimer = 1f;
+                    if (input.keyDown(Binding.control) && on.isAI()) { // Ctrl + click: control unit
+                        Call.unitControl(player, on);
+                        shouldShoot = false;
+                        recentRespawnTimer = 1f;
+                    } else if ((input.keyDown(Binding.control) || input.shift()) && on.isPlayer()) { // Shift + click player: quick assist (ctrl + click to follow cursor, shift/ctrl + alt + click to not follow)
+                        Navigation.follow(new AssistPath(on.playerNonNull(), input.keyDown(Binding.control), input.alt()));
+                        shouldShoot = false;
+                    } else if (on.controller() instanceof LogicAI ai && ai.controller != null && (!player.unit().type.canBoost || player.boosting)) { // Shift + click logic unit: spectate processor
+                        Spectate.INSTANCE.spectate(ai.controller);
+                        shouldShoot = false;
+                    }
                 }else if(build != null && input.keyDown(Binding.control)){
                     Call.buildingControlSelect(player, build);
                     recentRespawnTimer = 1f;
@@ -446,7 +457,7 @@ public class DesktopInput extends InputHandler{
         if(!player.dead() && !state.isPaused() && !scene.hasField() && !locked){
             updateMovement(player.unit());
 
-            if(Core.input.keyTap(Binding.respawn)){
+            if(Core.input.keyTap(Binding.respawn) && !scene.hasDialog()){
                 controlledType = null;
                 recentRespawnTimer = 1f;
                 Call.unitClear(player);
@@ -586,7 +597,7 @@ public class DesktopInput extends InputHandler{
         table.button(Icon.map, Styles.clearPartiali, () -> {
             if (state.isCampaign() && !Vars.net.client()) ui.planet.show();
             else MarkerDialog.INSTANCE.show();
-        }).tooltip(state.isCampaign() ? "@planetmap" : "Map Markers"); // FINISHME: Doesn't update
+        }).tooltip(t -> t.background(Styles.black6).margin(4f).label(() -> state.isCampaign() ? "@planetmap" : "Map Markers"));
 
         table.button(Icon.tree, Styles.clearPartiali, () -> {
             ui.research.show();
@@ -702,10 +713,6 @@ public class DesktopInput extends InputHandler{
                 mode = none;
             }else if(selectRequests.any()){
                 flushRequests(selectRequests);
-                if(selectRequests.size > 1024 && !Core.input.keyDown(Binding.toggle_placement_modifiers)) { // Deselect large schems
-                    selectRequests.clear();
-                    lastSchematic = null;
-                }
             }else if(isPlacing()){
                 selectX = cursorX;
                 selectY = cursorY;
@@ -865,14 +872,15 @@ public class DesktopInput extends InputHandler{
                 unit.lookAt(unit.prefRotation());
             }
 
-    //        unit.movePref(movement); Client replaces this with the line below
+//            unit.movePref(movement); Client replaces this with the line below
             unit.moveAt(movement);
 
             unit.aim(unit.type.faceTarget ? Core.input.mouseWorld() : Tmp.v1.trns(unit.rotation, Core.input.mouseWorld().dst(unit)).add(unit.x, unit.y));
 
-            // if autoboost, invert the behavior of the boost key
-            player.boosting = Core.settings.getBool("autoboost") ^ input.keyDown(Binding.boost);
-        }
+            player.boosting = unit.type.canBoost && Core.settings.getBool("autoboost") ^ input.keyDown(Binding.boost); // If auto-boost, invert the behavior of the boost key
+
+            if (!Core.input.keyDown(Binding.select) && shouldShoot) Client.INSTANCE.autoShoot();
+        } else if (Navigation.currentlyFollowing instanceof MinePath mp && mp.getNewGame() && !movement.isZero()) Navigation.stopFollowing(); // Stop automatic mining on player move
         unit.controlWeapons(true, player.shooting && !boosted);
 
         player.mouseX = unit.aimX();

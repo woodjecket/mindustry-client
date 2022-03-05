@@ -55,7 +55,7 @@ public class LogicDisplay extends Block{
 
         @Override
         public void draw(){
-//            super.draw();
+//            super.draw(); Don't draw borders
 
             Draw.draw(Draw.z(), () -> {
                 if(buffer == null){
@@ -103,7 +103,7 @@ public class LogicDisplay extends Block{
             Draw.blend(Blending.disabled);
             Draw.draw(Draw.z(), () -> {
                 if(buffer != null){
-                    Draw.rect(Draw.wrap(buffer.getTexture()), x, y, (buffer.getWidth() + 16) * Draw.scl, -(buffer.getHeight() + 16) * Draw.scl);
+                    Draw.rect(Draw.wrap(buffer.getTexture()), x, y, 32 * size * Draw.scl, -32 * size * Draw.scl);
                 }
             });
             Draw.blend();
