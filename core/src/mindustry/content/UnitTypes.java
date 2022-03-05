@@ -2040,6 +2040,7 @@ public class UnitTypes implements ContentList{
                         weaveMag = 4;
                         weaveScale = 4;
                         lifetime = 60f;
+                        keepVelocity = false;
                         shootEffect = Fx.shootHeal;
                         smokeEffect = Fx.hitLaser;
                         splashDamage = 13f;
@@ -2231,6 +2232,7 @@ public class UnitTypes implements ContentList{
                     backColor = Pal.heal;
                     frontColor = Color.white;
                     width = height = 12f;
+                    shrinkY = 0f;
                     speed = 5f;
                     trailLength = 20;
                     trailWidth = 6f;

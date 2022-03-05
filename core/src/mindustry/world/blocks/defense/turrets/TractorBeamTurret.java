@@ -36,7 +36,7 @@ public class TractorBeamTurret extends BaseTurret{
     public Sound shootSound = Sounds.tractorbeam;
     public float shootSoundVolume = 0.9f;
 
-    public @Load("block-@size") TextureRegion baseRegion;
+    public @Load(value = "@-base", fallback = "block-@size") TextureRegion baseRegion;
     public @Load("@-laser") TextureRegion laser;
     public @Load(value = "@-laser-start", fallback = "@-laser-end") TextureRegion laserStart;
     public @Load("@-laser-end") TextureRegion laserEnd;
@@ -147,7 +147,7 @@ public class TractorBeamTurret extends BaseTurret{
                     }
 
                     any = true;
-                    target.impulseNet(Tmp.v1.set(this).sub(target).limit((force + (1f - target.dst(this) / range) * scaledForce) * edelta() * timeScale));
+                    target.impulseNet(Tmp.v1.set(this).sub(target).limit((force + (1f - target.dst(this) / range) * scaledForce) * edelta()));
                 }
             }else{
                 strength = Mathf.lerpDelta(strength, 0, 0.1f);
