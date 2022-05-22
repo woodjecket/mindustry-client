@@ -164,9 +164,9 @@ public class Fonts{
 
     /** Called from a static context for use in the loading screen.*/
     public static void loadDefaultFont(){
-        int max = Gl.getInt(Gl.maxTextureSize);
+        int max = Gl.getInt(Gl.maxTextureSize) >= 4096 ? 4096 : 2048;
 
-        UI.packer = new PixmapPacker(max >= 4096 ? 4096 : 2048, 2048, 2, true);
+        UI.packer = new PixmapPacker(max, max, 2, true); //TODO Make this use MultiPacker.PageType.ui.width/height
         Core.assets.setLoader(FreeTypeFontGenerator.class, new FreeTypeFontGeneratorLoader(Core.files::internal));
         Core.assets.setLoader(Font.class, null, new FreetypeFontLoader(Core.files::internal){
             ObjectSet<FreeTypeFontParameter> scaled = new ObjectSet<>();
@@ -178,13 +178,12 @@ public class Fonts{
                     parameter.fontParameters.spaceX -= parameter.fontParameters.borderWidth;
                 }
 
-                if(!scaled.contains(parameter.fontParameters) && !unscaled.contains(fileName)){
+                if(!scaled.add(parameter.fontParameters) && !unscaled.contains(fileName)){
                     parameter.fontParameters.size = (int)(Scl.scl(parameter.fontParameters.size));
-                    scaled.add(parameter.fontParameters);
                 }
 
-                parameter.fontParameters.magFilter = TextureFilter.linear;
-                parameter.fontParameters.minFilter = TextureFilter.linear;
+                parameter.fontParameters.magFilter = TextureFilter.linear; //TODO Ignores Core.settings.getBool("linear") for some reason?
+                parameter.fontParameters.minFilter = TextureFilter.linear; //     Copying the whole atlas over is also slow, surely there's a better way
                 parameter.fontParameters.packer = UI.packer;
                 return super.loadSync(manager, fileName, file, parameter);
             }

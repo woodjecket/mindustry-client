@@ -35,6 +35,8 @@ public class BeControl{
     }
 
     public BeControl(){
+        if(true) return; // FINISHME: Add becontrol support for patched erekir builds
+
         if(active()){
             Timer.schedule(() -> {
                 if((Vars.clientLoaded || headless) && checkUpdates && !mobile){

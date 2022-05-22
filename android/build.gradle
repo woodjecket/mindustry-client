@@ -128,11 +128,13 @@ dependencies{
 }
 
 task copyAndroidNatives(){
-    configurations.natives.files.each{ jar ->
-        copy{
-            from zipTree(jar)
-            into file("libs/")
-            include "**"
+    doLast{
+        configurations.natives.files.each{ jar ->
+            copy{
+                from zipTree(jar)
+                into file("libs/")
+                include "**"
+            }
         }
     }
 }
@@ -141,10 +143,11 @@ task run(type: Exec){
     commandLine "${findSdkDir()}/platform-tools/adb", 'shell', 'am', 'start', '-n', 'io.anuke.mindustry/mindustry.android.AndroidLauncher'
 }
 
-if(!project.ext.hasSprites()){
-    tasks.whenTaskAdded{ task ->
-        if(task.name == 'assembleDebug' || task.name == 'assembleRelease'){
-            task.dependsOn ":tools:pack"
-        }
+afterEvaluate{ // Android tasks are generated at configure time by AGP
+    tasks.getByName("assembleDebug").mustRunAfter ":tools:pack"
+    tasks.getByName("assembleRelease").mustRunAfter ":tools:pack"
+    if(!project.ext.hasSprites()){
+        tasks.getByName("assembleDebug").dependsOn ":tools:pack"
+        tasks.getByName("assembleRelease").dependsOn ":tools:pack"
     }
 }

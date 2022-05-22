@@ -9,6 +9,8 @@ def ICON_DIR = new File("$rootDir/core/assets/icons/icon.icns")
 def platforms = ["Linux64", "Windows64", "Windows32", "MacOS"]
 
 task run(dependsOn: classes, type: JavaExec){
+    if(!project.ext.hasSprites) dependsOn ":tools:pack"
+    mustRunAfter ":tools:pack"
     mainClass = project.mainClassName
     classpath = sourceSets.main.runtimeClasspath
     standardInput = System.in
@@ -35,6 +37,8 @@ task run(dependsOn: classes, type: JavaExec){
 }
 
 task dist(type: Jar, dependsOn: configurations.runtimeClasspath){
+    if(!project.ext.hasSprites) dependsOn ":tools:pack"
+    mustRunAfter ":tools:pack"
     from files(sourceSets.main.output.classesDirs)
     from files(sourceSets.main.output.resourcesDir)
     from {configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }}
@@ -51,12 +55,6 @@ task dist(type: Jar, dependsOn: configurations.runtimeClasspath){
     manifest{
         attributes 'Main-Class': project.mainClassName
     }
-}
-
-if(!project.ext.hasSprites() && System.getenv("JITPACK") != "true"){
-    println "Scheduling sprite packing."
-    run.dependsOn ":tools:pack"
-    dist.dependsOn ":tools:pack"
 }
 
 //this is only for local testing

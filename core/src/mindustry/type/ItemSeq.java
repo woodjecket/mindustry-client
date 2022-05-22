@@ -11,7 +11,7 @@ import mindustry.world.modules.ItemModule.*;
 import java.util.*;
 
 public class ItemSeq implements Iterable<ItemStack>, JsonSerializable{
-    protected final int[] values = new int[Vars.content.items().size];
+    public final int[] values = new int[Vars.content.items().size];
     public int total;
 
     public ItemSeq(){
@@ -164,7 +164,7 @@ public class ItemSeq implements Iterable<ItemStack>, JsonSerializable{
     }
 
     @Override
-    public Iterator<ItemStack> iterator(){
+    public Iterator<ItemStack> iterator(){ //TODO Awful and likely to cause performance issues when modders use this a lot
         return toSeq().iterator();
     }
 }

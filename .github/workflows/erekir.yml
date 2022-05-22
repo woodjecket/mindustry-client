@@ -18,9 +18,7 @@ jobs:
       uses: gradle/gradle-build-action@v2
 
     - name: Run & Compile
-      run: |
-        ./gradlew cleanTest test tools:pack server:dist --parallel -PversionType=bleeding-edge
-        ./gradlew desktop:dist -PversionType=bleeding-edge
+      run: ./gradlew tools:pack cleanTest test server:dist desktop:dist --parallel -PversionType=bleeding-edge
 
     - name: Get Latest Release
       id: get_release

@@ -20,7 +20,7 @@ public class BuildWeapon extends Weapon{
     {
         rotate = true;
         bullet = new BulletType();
-        noAttack = false;
+        noAttack = true;
         predictTarget = false;
     }
 
