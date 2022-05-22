@@ -729,7 +729,7 @@ public class UnitType extends UnlockableContent{
             ab.init(this);
         }
 
-        canHeal = weapons.contains(w -> w.bullet.heals());
+        canHeal = weapons.contains(w -> w.bullet.heals() || w instanceof RepairBeamWeapon r && r.targetBuildings);
 
         //add mirrored weapon variants
         Seq<Weapon> mapped = new Seq<>();
