@@ -1,4 +1,4 @@
-name: Tests
+name: Erekir-patched
 
 on: [push, workflow_dispatch]
 
