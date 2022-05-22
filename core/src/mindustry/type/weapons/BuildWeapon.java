@@ -20,6 +20,8 @@ public class BuildWeapon extends Weapon{
     {
         rotate = true;
         bullet = new BulletType();
+        noAttack = false;
+        predictTarget = false;
     }
 
     @Override
