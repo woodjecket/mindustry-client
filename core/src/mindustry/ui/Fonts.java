@@ -178,8 +178,9 @@ public class Fonts{
                     parameter.fontParameters.spaceX -= parameter.fontParameters.borderWidth;
                 }
 
-                if(!scaled.add(parameter.fontParameters) && !unscaled.contains(fileName)){
+                if(!scaled.contains(parameter.fontParameters) && !unscaled.contains(fileName)){
                     parameter.fontParameters.size = (int)(Scl.scl(parameter.fontParameters.size));
+                    scaled.add(parameter.fontParameters);
                 }
 
                 parameter.fontParameters.magFilter = TextureFilter.linear; //TODO Ignores Core.settings.getBool("linear") for some reason?
