@@ -373,13 +373,13 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     public static void requestDropPayload(Player player, float x, float y){
         if(player == null || net.client()) return;
 
-        Payloadc pay = (Payloadc)player.unit();
+        if(player.unit() instanceof Payloadc pay){
+            //apply margin of error
+            Tmp.v1.set(x, y).sub(pay).limit(tilesize * 4f).add(pay);
+            float cx = Tmp.v1.x, cy = Tmp.v1.y;
 
-        //apply margin of error
-        Tmp.v1.set(x, y).sub(pay).limit(tilesize * 4f).add(pay);
-        float cx = Tmp.v1.x, cy = Tmp.v1.y;
-
-        Call.payloadDropped(player.unit(), cx, cy);
+            Call.payloadDropped(player.unit(), cx, cy);
+        }
     }
 
     @Remote(called = Loc.server, targets = Loc.server)
