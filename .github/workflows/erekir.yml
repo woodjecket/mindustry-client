@@ -1,4 +1,4 @@
-name: Erekir-patched
+name: Erekir-patched-optimized
 
 on: [push, workflow_dispatch]
 
@@ -18,7 +18,7 @@ jobs:
       uses: gradle/gradle-build-action@v2
 
     - name: Run & Compile
-      run: ./gradlew tools:pack cleanTest test server:dist desktop:dist --parallel -PversionType=bleeding-edge
+      run: ./gradlew tools:pack cleanTest test desktop:dist --parallel -PversionType=bleeding-edge
 
     - name: Get Latest Release
       id: get_release
@@ -30,7 +30,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
       with:
         release_id: ${{ steps.get_release.outputs.id }}
-        asset_name: erekir-patched.jar
+        asset_name: erekir-patched-optimized.jar
 
     - name: Upload New Desktop Jar
       uses: actions/upload-release-asset@v1
@@ -39,23 +39,5 @@ jobs:
       with:
         upload_url: ${{ steps.get_release.outputs.upload_url }}
         asset_path: desktop/build/libs/Mindustry.jar
-        asset_name: erekir-patched.jar
-        asset_content_type: application/zip
-
-    - name: Delete Old Server Jar
-      uses: flcdrg/remove-release-asset-action@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-      with:
-        release_id: ${{ steps.get_release.outputs.id }}
-        asset_name: erekir-server-patched.jar
-
-    - name: Upload New Server Jar
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-      with:
-        upload_url: ${{ steps.get_release.outputs.upload_url }}
-        asset_path: server/build/libs/server-release.jar
-        asset_name: erekir-server-patched.jar
+        asset_name: erekir-patched-optimized.jar
         asset_content_type: application/zip
