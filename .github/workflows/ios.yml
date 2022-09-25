@@ -1,0 +1,35 @@
+name: Java CI with Gradle
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    - name: Arc Clone
+      run: |
+           cd ..
+           git clone https://github.com/Anuken/Arc.git
+           cd cn-arc-ios
+    - name: iOS deploy
+      run: ./gradlew ios:deploy
+    - name: Upload file
+      uses: actions/upload-artifact@v3
+      with:
+          name: ios-build
+          path: ios/build/robovm/
